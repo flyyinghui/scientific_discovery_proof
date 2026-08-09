@@ -1,0 +1,38 @@
+{
+  "name": "Dark Matter as Topological Defects in SL(6,C) Gauge Theory",
+  "description": "Dark matter is not a new particle species but a geometric-topological phenomenon arising from Kibble-Zurek defect formation during the SL(6,C) → SU(6) phase transition in the early universe. The conjecture predicts Ω_DM / Ω_b ≈ 5 as a consequence of the homotopy group classification of defects in the symmetry-breaking pattern.",
+  "framework": "SL(6,C) gauge theory with CGICE effective action",
+  "domain": "cosmology",
+  "axioms": [
+    {"id": "A1", "description": "SL(6,C) is the gauge group of 6D spacetime prior to phase transition", "type": "honest-axiom"},
+    {"id": "A2", "description": "The symmetry breaking pattern is SL(6,C) → SU(6) via CGICE mechanism", "type": "geometric-conjecture"},
+    {"id": "A3", "description": "Kibble-Zurek mechanism applies: defect density ∝ τ_Q^{−ν/(1+νz)}", "type": "proven-theorem", "literature": "Kibble 1976; Zurek 1985"},
+    {"id": "A4", "description": "Homotopy groups: π₀(SU(6)) = 0, π₁(SU(6)) = 0, π₂(SU(6)) = 0, π₃(SU(6)) = ℤ", "type": "proven-theorem", "literature": "Bott periodicity"},
+    {"id": "A5", "description": "Topological defect energy density redshifts as ρ_defect ∝ a^{−3} (non-relativistic)", "type": "honest-axiom"},
+    {"id": "A6", "description": "The ratio of defect to baryon density is set by the CGICE condensation scale Λ_CGICE / Λ_QCD", "type": "honest-axiom"},
+    {"id": "A7", "description": "KLS constant λ_KLS = 35/3 for SL(6,C)/SU(6) symmetric space", "type": "geometric-conjecture"}
+  ],
+  "claims": [
+    {"id": "C1", "description": "π₃ defect density predicts Ω_DM / Ω_b ≈ 5", "expected_value": 5.0, "tolerance": 0.2},
+    {"id": "C2", "description": "Defect-stabilized galactic rotation curves match NFW profile", "expected_value": null},
+    {"id": "C3", "description": "No new particles beyond Standard Model + sterile neutrino", "expected_value": true}
+  ],
+  "targets": [
+    {"id": "T1", "description": "Prove Ω_DM / Ω_b = 5 from homotopy group classification + KZ mechanism", "depends_on": ["A3", "A4", "A6"]},
+    {"id": "T2", "description": "Derive NFW profile from CGICE topological defect density distribution", "depends_on": ["A5", "C2"]}
+  ],
+  "parameters": {
+    "Λ_CGICE": "~10¹⁴ GeV",
+    "τ_Q": "quench timescale (model-dependent)",
+    "ν": 0.67,
+    "z": 2.0
+  },
+  "brain_concepts": [
+    "Kibble-Zurek mechanism",
+    "topological defect cosmology",
+    "SL(6,C) gauge theory",
+    "CGICE effective action",
+    "homotopy group classification",
+    "dark matter density 5:1 ratio"
+  ]
+}
