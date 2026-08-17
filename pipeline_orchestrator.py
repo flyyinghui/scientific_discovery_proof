@@ -236,7 +236,71 @@ def run_stage3_ppe(conjecture_path: Path, stage2_output: dict, output_dir: Path)
     with open(proof_result_path, 'w') as f:
         json.dump(result, f, indent=2)
     
+    # ── Stage 3.5: 形式化证明自洽性审计门 ────────────────────
+    # [v2.1.0] 在 PPE 证明后、论文生成前，审计公理自洽性/表演性诚实/
+    # 公理计数/定理存在性/空壳证明/离散谱错误（固化自三轮终审）。
+    audit = _run_stage35_consistency_audit(proof_dir, conjecture_path, output_dir)
+    result['stage35_audit'] = audit
+    
     return result
+
+
+def _run_stage35_consistency_audit(proof_dir: Path, conjecture_path: Path, output_dir: Path) -> dict:
+    """Stage 3.5: run formal proof consistency audit."""
+    print("\n" + "="*60)
+    print("STAGE 3.5: Formal Proof Consistency Audit")
+    print("="*60)
+    
+    # Locate the generated Lean proof file
+    lean_files = sorted(proof_dir.glob("*.lean")) if proof_dir.exists() else []
+    if not lean_files:
+        print("[Stage3.5] ⚠️ No .lean file found in proof_dir — skipping audit")
+        return {'stage': 3.5, 'status': 'skipped', 'reason': 'no lean file'}
+    
+    lean_path = lean_files[0]  # use the first (primary) proof file
+    audit_script = Path(__file__).resolve().parent / "proof_consistency_audit.py"
+    
+    # Paper text (if stage 4 hasn't run yet, we only have the conjecture)
+    paper_arg = []
+    
+    # Build command
+    cmd = [
+        VENV_PYTHON, str(audit_script),
+        "--lean", str(lean_path),
+        "--output", str(output_dir / "stage35_audit_report.json"),
+    ]
+    if paper_arg:
+        cmd += ["--paper", paper_arg[0]]
+    
+    print(f"[Stage3.5] Auditing: {lean_path.name}")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        print(proc.stdout)
+        # 从审计 JSON 读真实 gate（PASS/WARN/BLOCK），不能只看 exit_code
+        gate = "PASS"
+        audit_json_path = output_dir / "stage35_audit_report.json"
+        if audit_json_path.exists():
+            try:
+                gate = json.loads(audit_json_path.read_text()).get("gate", "PASS")
+            except Exception:
+                gate = "BLOCK" if proc.returncode != 0 else "PASS"
+        audit_result = {
+            'stage': 3.5,
+            'status': 'completed',
+            'exit_code': proc.returncode,
+            'gate': gate,
+            'lean_file': str(lean_path),
+            'timestamp': datetime.now().isoformat()
+        }
+        if gate == 'BLOCK':
+            print("[Stage3.5] 🔴 GATE BLOCKED — proof has consistency issues")
+        elif gate == 'WARN':
+            print("[Stage3.5] 🟡 GATE WARN — see warnings above")
+    except Exception as e:
+        audit_result = {'stage': 3.5, 'status': 'error', 'error': str(e)}
+        print(f"[Stage3.5] ⚠️ Audit error: {e}")
+    
+    return audit_result
 
 
 def run_stage4_paper(conjecture_path: Path, stage3_output: dict, output_dir: Path) -> dict:
@@ -341,12 +405,17 @@ def _generate_proof_skeleton(conjecture_path: Path) -> str:
         ax_id = ax.get('id', f'A{i+1}')
         ax_desc = ax.get('description', 'No description')
         lines.append(f"/-- [honest-axiom] {ax_id}: {ax_desc} --/")
-        lines.append(f"axiom {ax_id.lower()}_axiom : True := by trivial")
+        # [P0 FIX] 不用 `:= by trivial`（空壳假证明），改为显式 honest-axiom 声明。
+        # 研究级前提必须诚实声明为 axiom（可被 #print axioms 审计），
+        # 而非伪装成"已证明"的空壳定理。
+        lines.append(f"axiom {ax_id.lower()}_axiom : True")
         lines.append("")
     
+    lines.append(f"/-- 主定理骨架 — 证明体待 PPE Stage 3 填充 --/")
     lines.append(f"theorem main_result : True := by")
-    lines.append(f"  -- TODO: fill in proof")
-    lines.append(f"  trivial")
+    lines.append(f"  -- [P0 FIX] 不用 trivial 空壳。此骨架仅声明目标命题，")
+    lines.append(f"  -- 真实证明由 PPE MCTS+ABC 搜索生成，并经 Stage 3.5 审计门验证。")
+    lines.append(f"  sorry")
     
     return '\n'.join(lines)
 

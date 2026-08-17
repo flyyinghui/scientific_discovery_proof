@@ -47,6 +47,26 @@ Three-tool verification pipeline:
 - `proof_stats`: theorem/lemma/strategy statistics
 - `sorry_analyzer`: zero-sorry gate enforcement
 
+## Stage 3.5 Consistency Audit (v2.1.0)
+
+MathCode 三工具只"数数"（axiom/sorry 计数），不"查矛盾"。`proof_consistency_audit.py`
+在证明完成后执行六类 P0 检测（见 `../references/formal-proof-consistency-audit.md`）：
+
+| 缺陷类 | 严重度 |
+|---|---|
+| 公理自相矛盾（爆炸原理 X=Y vs X≠Y） | BLOCK |
+| 表演性诚实（`-- @[honest_axiom]` 注释 vs 真实 attribute） | WARN |
+| 公理/定理计数不一致 | WARN |
+| 定理虚假声称（论文 "fully verified" vs Lean 缺失） | BLOCK |
+| `:= by trivial` / `:= True` 空壳 | WARN |
+| 离散谱 vs 非紧空间连续谱 | BLOCK |
+
+```bash
+python proof_consistency_audit.py \
+  --lean proof.lean --paper paper.txt \
+  --expected-axioms 14 --output audit.json
+```
+
 ## Dependencies
 
 ```bash
