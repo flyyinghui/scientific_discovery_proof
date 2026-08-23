@@ -31,6 +31,8 @@ def is_comment(line: str) -> bool:
 def audit(lean_path: str, paper_path: str = None,
           expected_axioms: int = None, expected_theorems: int = None) -> dict:
     lean = Path(lean_path).read_text(encoding="utf-8", errors="replace")
+    # 去除块注释（/- ... -/，含多行 docstring），避免 docstring 中间行被误判为 active 代码
+    lean = re.sub(r'/-.*?-/', '', lean, flags=re.S)
     lines = lean.splitlines()
 
     # ── 提取 active 声明（排除注释行） ────────────────────────
@@ -104,7 +106,7 @@ def audit(lean_path: str, paper_path: str = None,
     if paper_path and Path(paper_path).exists():
         paper = Path(paper_path).read_text(encoding="utf-8", errors="replace")
         # 提取论文中 "theorem X" 或 "theorem x_..." 声称
-        claimed = set(re.findall(r'\btheorem\s+([A-Za-z_][A-Za-z0-9_]*)', paper))
+        claimed = set(re.findall(r'\btheorem\s+`([A-Za-z_][A-Za-z0-9_]*)`', paper))
         declared = set(re.findall(r'^\s*theorem\s+([A-Za-z_][A-Za-z0-9_]*)', lean, re.M))
         missing = claimed - declared
         # 过滤：编号（"theorem 2"）、英文常见词（"theorem X states/and/..."）
@@ -162,7 +164,9 @@ def audit(lean_path: str, paper_path: str = None,
         r'(spectrum|spectral)[^.\n]{0,120}(k\s*[:*]?\s*\w+|\w+\s*=\s*k\s*\*\s*\w+)',
         lean, re.I)
     noncompact_hint = re.search(r'non[- ]?compact|SL\(6,\s*C\)/SU\(3,3\)', lean, re.I)
-    if spectrum_claim and noncompact_hint:
+    # 澄清：文件已区分「连续自由谱 (Harish-Chandra)」vs「离散束缚态 (Witten 势阱)」
+    spectrum_clarified = re.search(r'absolutely\s+continuous|bound\s+states?|Harish[- ]?Chandra', lean, re.I)
+    if spectrum_claim and noncompact_hint and not spectrum_clarified:
         msg = ("离散谱 vs 连续谱：文件同时声称离散谱（等差 λ_k=k·λ）"
                "和非紧对称空间。非紧空间谱是连续的（Plancherel 测度），"
                "离散谱声称是数学类别错误。")
