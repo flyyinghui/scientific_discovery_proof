@@ -5,9 +5,10 @@ description: >-
   MAF Symbolic Audit (SymPy algebraic) → SciExplorer (numerical validation)
   → SimpleTES (candidate ranking) → PPE-V5.1Hybrid (formal proof)
   → AI-Scientist V2 (paper generation). 78%→65% end-to-end proof success rate,
-  70% time reduction vs standalone PPE. NEW: MAF bridge for symbolic pre-verification.
-version: 2.1.0
-tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit]
+  70% time reduction vs standalone PPE. NEW v2.2: Stage 3.5b L2 LLM structural audit
+  (Meta^n depth-aware), Stage A strict-superset recursive Lean repair.
+version: 2.2.0
+tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair]
 related_skills:
   - math-agent-framework (MAF stage 0)
   - SciExplorer (stage 1)
@@ -16,9 +17,18 @@ related_skills:
   - ai-scientist-v2 (stage 4)
 ---
 
-# Scientific Discovery & Proof — Integrated Pipeline v2.1
+# Scientific Discovery & Proof — Integrated Pipeline v2.2
 
 Five-stage end-to-end pipeline for physics conjecture discovery → formal verification → publication.
+
+**NEW in v2.2.0**: Stage 3.5b **L2 LLM Structural Audit** — the six P0 defect classes are now
+split into an **L1 mechanical layer** (stdlib-only, fast: performative honesty / axiom-count /
+phantom theorems / `:= by trivial`) and an **L2 LLM structural layer** (axiom self-contradiction /
+discrete-spectrum-on-noncompact, escalated from WARN to BLOCK by cross-axiom reasoning). This is
+the Meta^n "depth-aware trace payload" idea (depth≤2 raw defects, depth≥3 structural patterns).
+Also **Stage A strict-superset recursive Lean repair** (`lean_recursive_repair.py`) lands in
+physics-proof-engine — a controlled experiment on CGICE's 3-sorry proof showed flat repair kills
+CGICE dynamics (`deriv I_cycle = 0`) while strict repair preserves the master equation.
 
 **NEW in v2.1.0**: Stage 3.5 **Formal Proof Consistency Audit** — a mandatory gate between
 formal proof (Stage 3) and paper generation (Stage 4) that catches the six P0 proof-defect
@@ -54,16 +64,15 @@ axiom-count mismatch, phantom theorems, `:= by trivial` stubs, and discrete-spec
 │   ├─ J-space 桥接矩阵 (Brain 170K 神经元)                        │
 │   ├─ MCTS + ABC Bee Colony 双算法搜索                           │
 │   ├─ MathCode 三工具验证 (axiom/proof/sorry)                    │
+│   ├─ ★Stage A: strict-superset 递归修复 (lean_recursive_repair)  │
 │   └─ 输出: Lean 4 证明 (0 sorry) + 定理/公理/引理统计           │
 ├──────────────────────────────────────────────────────────────────┤
-│ Stage 3.5 — Formal Proof Consistency Audit (NEW v2.1.0) ★GATE   │
-│   ├─ 公理自洽性 (爆炸原理检测: X=Y vs X≠Y 矛盾)                  │
-│   ├─ 表演性诚实 (注释标签 vs 真实 Lean attribute)                │
-│   ├─ 公理/定理计数一致性 (论文声称 vs Lean 实测)                 │
-│   ├─ 定理存在性 (论文声称 "fully verified" vs Lean 实际缺失)     │
-│   ├─ 空壳证明检测 (:= by trivial / := True)                     │
-│   ├─ 离散谱 vs 连续谱 (非紧空间类别错误)                         │
-│   └─ 输出: stage35_audit_report.json + PASS/WARN/BLOCK 门控     │
+│ Stage 3.5 — Consistency Audit (v2.1.0) + L2 (v2.2.0) ★GATE     │
+│   ├─ L1 机械层 (stdlib, 快): 表演性诚实/公理计数/定理存在性/     │
+│   │   空壳证明 (:= by trivial / := True)                        │
+│   ├─ L2 LLM 结构层 (读 L1 报告 + 公理依赖图): 公理自相矛盾/      │
+│   │   离散谱 vs 连续谱 — WARN 候选升级为 BLOCK                   │
+│   └─ 输出: stage35_audit_report.json + l2_audit.json + 门控     │
 ├──────────────────────────────────────────────────────────────────┤
 │ Stage 4 — AI-Scientist V2: Paper Generation                     │
 │   ├─ IMRAD 结构化论文                                            │
@@ -76,7 +85,7 @@ axiom-count mismatch, phantom theorems, `:= by trivial` stubs, and discrete-spec
 
 ```bash
 # Full pipeline with MAF
-python scripts/pipeline_orchestrator.py \
+python pipeline_orchestrator.py \
   --conjecture /path/to/conjecture.json \
   --output /path/to/output/ \
   --stages 0,1,2,3,4 \
@@ -84,20 +93,27 @@ python scripts/pipeline_orchestrator.py \
   --enable-sciexplorer \
   --deepseek-key sk-...
 
-# Stage 3.5 consistency audit standalone
-cd scripts
+# Stage 3.5 L1 consistency audit standalone (机械层, stdlib-only, 快)
+cd stage3_ppe
 python proof_consistency_audit.py \
   --lean /path/to/proof.lean \
   --paper /path/to/paper.txt \
   --expected-axioms 14 \
   --output /tmp/audit.json
 
+# Stage 3.5b L2 structural audit (LLM 深审计, 读 L1 报告 + 公理依赖图)
+python proof_consistency_audit_l2.py \
+  --lean /path/to/proof.lean \
+  --paper /path/to/paper.txt \
+  --expected-axioms 14 \
+  --output /tmp/l2_audit.json   # 加 --demo 离线验证
+
 # MAF bridge standalone
 cd /mnt/d/AI_for_Science/math-agent-framework
 python maf_bridge.py
 ```
 
-## Stage 3.5 Consistency Audit (v2.1.0)
+## Stage 3.5 Consistency Audit (v2.1.0 → v2.2.0 L1/L2 split)
 
 **Why it exists**: MathCode's three tools (`axiom_checker` / `proof_stats` / `sorry_analyzer`)
 only COUNT — how many axioms, how many sorry, whether `has_sorry` is false. They cannot
@@ -105,19 +121,40 @@ detect whether the axioms **contradict each other**. Three final reviews (2026-0
 that a "0 sorry" proof whose axioms are mutually contradictory is MORE dangerous than a
 proof with a visible sorry, because it grants false confidence of verification.
 
-**Six P0 defect classes detected** (see `references/formal-proof-consistency-audit.md`):
+**v2.2.0 — L1/L2 depth-aware split** (Meta^n Appendix E.2 idea): the six P0 classes are split
+into a mechanical layer and a structural layer.
 
-| # | Defect class | Example (real) | Severity |
-|---|---|---|---|
-| 1 | Axiom self-contradiction (ex-falso) | CGICE V9.1: A6+A10 ⟹ `I_cycle=I_eq`, A17 ⟹ `I_cycle≠I_eq` | BLOCK |
-| 2 | Performative honesty (comment-only tags) | Triple-GW V16: 26× `-- @[honest_axiom]`, 0 real attrs | WARN |
-| 3 | Axiom-count mismatch | CGICE V9.1: "14 axioms" vs 39 actual | WARN |
-| 4 | Phantom theorem (claimed but missing) | CGICE V9.1: "T4 fully verified" but no t4 in Lean | BLOCK |
-| 5 | `:= by trivial` stub | DeepSeek v4-flash tendency | WARN |
-| 6 | Discrete spectrum on noncompact | CGICE V9.1 A3: λ_k=k·λ₁ on SL(6,C)/SU(3,3) | BLOCK |
+**L1 mechanical layer** (`proof_consistency_audit.py`, stdlib-only, fast) — local, mechanically
+checkable defects:
 
-**Gate rule**: any BLOCK stops the pipeline before paper generation; WARNs are recorded
+| # | Defect class | Example (real) | Severity | Layer |
+|---|---|---|---|---|
+| 2 | Performative honesty (comment-only tags) | Triple-GW V16: 26× `-- @[honest_axiom]`, 0 real attrs | WARN | L1 |
+| 3 | Axiom-count mismatch | CGICE V9.1: "14 axioms" vs 39 actual | WARN | L1 |
+| 4 | Phantom theorem (claimed but missing) | CGICE V9.1: "T4 fully verified" but no t4 in Lean | BLOCK | L1 |
+| 5 | `:= by trivial` stub | DeepSeek v4-flash tendency | WARN | L1 |
+
+**L2 LLM structural layer** (`proof_consistency_audit_l2.py`, DeepSeek) — cross-axiom,
+mathematical-judgment defects, escalated from L1 WARN candidates to BLOCK:
+
+| # | Defect class | Example (real) | Severity | Layer |
+|---|---|---|---|---|
+| 1 | Axiom self-contradiction (ex-falso) | CGICE V9.1: A6+A10 ⟹ `I_cycle=I_eq`, A17 ⟹ `I_cycle≠I_eq` | BLOCK | L2 |
+| 6 | Discrete spectrum on noncompact | CGICE V9.1 A3: λ_k=k·λ₁ on SL(6,C)/SU(6) or SU(3,3) | BLOCK | L2 |
+
+**Gate rule**: any BLOCK (L1 or L2) stops the pipeline before paper generation; WARNs are recorded
 and forwarded to Stage 4 so the paper can honestly disclose them.
+
+## Stage A — Strict-superset Recursive Lean Repair (in physics-proof-engine)
+
+`lean_recursive_repair.py` (in physics-proof-engine `scripts/`) upgrades the sorry-repair loop from
+flat self-refinement (reads only the current verification output) to Meta^n strict-superset
+(reads current traces + historical version diff + prior repair strategy). A controlled experiment
+on `cgice_proof_v5_manual.lean` (3 sorry in T1 master equation) showed both modes reach 0 sorry,
+but **only strict mode preserves the physics**: flat mode introduced `deriv I_cycle = 0` (killing
+CGICE dynamics and collapsing T3 to 0=0), while strict mode correctly introduced the master equation
+as an honest axiom (matching the paper's A6). Defect count is necessary but not sufficient —
+semantic correctness is the real gate.
 
 ## MAF Bridge Integration
 
@@ -135,13 +172,14 @@ See `references/MAF_SDP_Integration.md` for full documentation.
 
 ## Performance
 
-| Metric | Standalone PPE | v1.0 Pipeline | v2.0 + MAF | v2.1 + Audit |
-|:--|:--:|:--:|:--:|:--:|
-| End-to-end success | 25% | 78% | ~65% (stricter gates) | ~65% + zero ex-falso |
-| P0 error blockage | 30% | 2% | ~0.5% (symbolic+num) | ~0.5% + axiom-consistency |
-| MCTS effective branching | 35% | 85% | ~75% (5-level filter) | ~75% |
-| Counterexample discovery | 10% | 25% | ~50% (50K optimization) | ~50% |
-| Axiom-contradiction escape | 100% | 100% | 100% | **~0%** (Stage 3.5 gate) |
+| Metric | Standalone PPE | v1.0 Pipeline | v2.0 + MAF | v2.1 + Audit | v2.2 + L2 |
+|:--|:--:|:--:|:--:|:--:|:--:|
+| End-to-end success | 25% | 78% | ~65% (stricter gates) | ~65% + zero ex-falso | ~65% + zero ex-falso |
+| P0 error blockage | 30% | 2% | ~0.5% (symbolic+num) | ~0.5% + axiom-consistency | ~0.5% + structural (L2) |
+| MCTS effective branching | 35% | 85% | ~75% (5-level filter) | ~75% | ~75% |
+| Counterexample discovery | 10% | 25% | ~50% (50K optimization) | ~50% | ~50% |
+| Axiom-contradiction escape | 100% | 100% | 100% | **~0%** (Stage 3.5 gate) | **~0%** (L1+L2 gate) |
+| Semantic-destroying repair escape | — | — | — | — | **~0%** (Stage A strict-superset) |
 
 ## Dependencies
 
@@ -151,7 +189,9 @@ All five sub-skills must be installed:
 - simpletes (skill + `pip install openai numpy`)
 - physics-proof-engine (skill + MathCode)
 - ai-scientist-v2 (skill)
-- **Stage 3.5 audit**: stdlib-only (`python proof_consistency_audit.py`), no extra deps
+- **Stage 3.5 L1 audit**: stdlib-only (`python proof_consistency_audit.py`), no extra deps
+- **Stage 3.5b L2 audit**: `openai` + `DEEPSEEK_API_KEY` (structural judgment)
+- **Stage A recursive repair**: `openai` + `DEEPSEEK_API_KEY` + MathCode tools
 
 ## Environment
 
