@@ -163,7 +163,7 @@ def audit(lean_path: str, paper_path: str = None,
     spectrum_claim = re.search(
         r'(spectrum|spectral)[^.\n]{0,120}(k\s*[:*]?\s*\w+|\w+\s*=\s*k\s*\*\s*\w+)',
         lean, re.I)
-    noncompact_hint = re.search(r'non[- ]?compact|SL\(6,\s*C\)/SU\(3,3\)', lean, re.I)
+    noncompact_hint = re.search(r'non[- ]?compact|SL\([^)]*\)/SU\(', lean, re.I)
     # 澄清：文件已区分「连续自由谱 (Harish-Chandra)」vs「离散束缚态 (Witten 势阱)」
     spectrum_clarified = re.search(r'absolutely\s+continuous|bound\s+states?|Harish[- ]?Chandra', lean, re.I)
     if spectrum_claim and noncompact_hint and not spectrum_clarified:
