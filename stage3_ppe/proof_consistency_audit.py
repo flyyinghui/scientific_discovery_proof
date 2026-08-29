@@ -59,13 +59,24 @@ def audit(lean_path: str, paper_path: str = None,
 
     # ── 检测 2: 表演性诚实 ──────────────────────────────────
     real_attr = sum(1 for l in active if l.strip().startswith('@['))
-    comment_attr = sum(1 for l in lines if '-- @[' in l or '--@[' in l)
-    if comment_attr > 0 and real_attr == 0:
-        msg = (f"表演性诚实：{comment_attr} 处 '-- @[...]' 注释标签，"
+    # 两种注释标签格式（严格区分）：
+    # (a) '-- @[honest_axiom]'：伪装成 Lean attribute 的注释 —— 表演性诚实候选
+    # (b) '-- [honest-axiom]'：诚实的概念标签注释 —— 诚实披露，非表演性诚实
+    comment_attr_pseudo = sum(1 for l in lines if '-- @[' in l or '--@[' in l)
+    comment_attr_honest = sum(1 for l in lines if '-- [honest-axiom]' in l or '--[honest-axiom]' in l)
+    if comment_attr_pseudo > 0 and real_attr == 0:
+        msg = (f"表演性诚实：{comment_attr_pseudo} 处 '-- @[...]' 注释伪装成 attribute，"
                f"但 0 处真实 Lean attribute。论文不得声称 'declared as @[honest_axiom]'。")
         warns.append(msg)
         findings.append({"type": "performative_honesty", "severity": "WARN",
-                         "comment_attrs": comment_attr, "real_attrs": real_attr, "msg": msg})
+                         "comment_attrs": comment_attr_pseudo, "real_attrs": real_attr, "msg": msg})
+    elif comment_attr_honest > 0 and real_attr == 0:
+        # 诚实标签：'-- [honest-axiom]' 是概念标签注释，非 attribute 伪装。
+        # 这是诚实披露（若论文明确声明"honest-axiom 是注释标签非 attribute"），不 WARN。
+        findings.append({"type": "honest_axiom_comment_labels", "severity": "INFO",
+                         "comment_labels": comment_attr_honest, "real_attrs": real_attr,
+                         "msg": f"{comment_attr_honest} 处 '-- [honest-axiom]' 概念标签注释"
+                                f"（诚实披露，非 attribute 伪装；确认论文未声称 @[honest_axiom]）"})
 
     # ── 检测 5: := by trivial 空壳 ───────────────────────────
     if n_trivial > 0:
@@ -190,7 +201,8 @@ def audit(lean_path: str, paper_path: str = None,
             "trivial_stubs": n_trivial,
             "true_stubs": n_true_stub,
             "real_attributes": real_attr,
-            "comment_attributes": comment_attr,
+            "comment_attributes_pseudo": comment_attr_pseudo,
+            "comment_attributes_honest": comment_attr_honest,
         },
         "gate": gate,
         "blocks": blocks,
@@ -221,7 +233,7 @@ def main():
     print(f"  axioms={s['axioms']}  theorems={s['theorems']}  lemmas={s['lemmas']}")
     print(f"  sorry={s['active_sorry']}  admit={s['active_admit']}  "
           f"trivial_stubs={s['trivial_stubs']}  true_stubs={s['true_stubs']}")
-    print(f"  real_attrs={s['real_attributes']}  comment_attrs={s['comment_attributes']}")
+    print(f"  real_attrs={s['real_attributes']}  pseudo_attrs={s['comment_attributes_pseudo']}  honest_labels={s['comment_attributes_honest']}")
     print(f"\n  GATE: {report['gate']}")
     for b in report["blocks"]:
         print(f"  🔴 BLOCK: {b}")
