@@ -368,7 +368,7 @@ Include an abstract. Output as clean markdown."""
 def _load_api_key() -> str:
     """Load DeepSeek API key."""
     for env_path in [
-        '/mnt/d/123321/CityHDGanalysis/Spatial_Reasoning_Agent/.env',
+        '/mnt//usr/local/.env',
         os.path.expanduser('~/.hermes/.env'),
     ]:
         if os.path.exists(env_path):
