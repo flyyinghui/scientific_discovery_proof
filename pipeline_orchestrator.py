@@ -258,8 +258,12 @@ def _run_stage35_consistency_audit(proof_dir: Path, conjecture_path: Path, outpu
         return {'stage': 3.5, 'status': 'skipped', 'reason': 'no lean file'}
     
     lean_path = lean_files[0]  # use the first (primary) proof file
-    audit_script = Path(__file__).resolve().parent / "proof_consistency_audit.py"
-    
+    # [GitHub review] audit 脚本位于 stage3_ppe/ 子目录（GitHub 仓库结构）
+    audit_script = Path(__file__).resolve().parent / "stage3_ppe" / "proof_consistency_audit.py"
+    if not audit_script.exists():
+        print(f"[Stage3.5] Audit script not found at {audit_script} — skipping audit")
+        return {'stage': 3.5, 'status': 'skipped', 'reason': 'audit script not found'}
+
     # Paper text (if stage 4 hasn't run yet, we only have the conjecture)
     paper_arg = []
     
@@ -279,11 +283,17 @@ def _run_stage35_consistency_audit(proof_dir: Path, conjecture_path: Path, outpu
         # 从审计 JSON 读真实 gate（PASS/WARN/BLOCK），不能只看 exit_code
         gate = "PASS"
         audit_json_path = output_dir / "stage35_audit_report.json"
+        report = None
         if audit_json_path.exists():
             try:
-                gate = json.loads(audit_json_path.read_text()).get("gate", "PASS")
+                report = json.loads(audit_json_path.read_text())
+                gate = report.get("gate", "PASS")
             except Exception:
                 gate = "BLOCK" if proc.returncode != 0 else "PASS"
+        # [GitHub review] gate/stats 一致性断言：active_sorry>0 时 gate 必须 BLOCK
+        if report is not None:
+            assert (report["stats"]["active_sorry"] == 0) or report["gate"] == "BLOCK", \
+                "gate/stats inconsistency: active_sorry>0 but gate!=BLOCK"
         audit_result = {
             'stage': 3.5,
             'status': 'completed',
@@ -368,7 +378,7 @@ Include an abstract. Output as clean markdown."""
 def _load_api_key() -> str:
     """Load DeepSeek API key."""
     for env_path in [
-        '/mnt//usr/local/.env',
+        '/mnt/d/123321/CityHDGanalysis/Spatial_Reasoning_Agent/.env',
         os.path.expanduser('~/.hermes/.env'),
     ]:
         if os.path.exists(env_path):
