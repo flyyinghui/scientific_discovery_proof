@@ -57,6 +57,15 @@ def audit(lean_path: str, paper_path: str = None,
     blocks = []   # 阻断级
     warns = []    # 警告级
 
+    # ── 检测 0: active sorry（未完成证明，最高优先级 BLOCK） ──
+    # [GitHub review] n_sorry 此前只进 stats 从未触发 gate —— 一个含 sorry 的
+    # 未完成证明会以 gate=PASS 通过审计门。必须在门控前强制 BLOCK。
+    if n_sorry > 0:
+        msg = f"{n_sorry} 处 active 'sorry'（未完成证明）。gate 必须为 BLOCK。"
+        blocks.append(msg)
+        findings.append({"type": "active_sorry", "severity": "BLOCK",
+                         "count": n_sorry, "msg": msg})
+
     # ── 检测 2: 表演性诚实 ──────────────────────────────────
     real_attr = sum(1 for l in active if l.strip().startswith('@['))
     # 两种注释标签格式（严格区分）：
