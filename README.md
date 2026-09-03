@@ -5,10 +5,10 @@ description: >-
   MAF Symbolic Audit (SymPy algebraic) → SciExplorer (numerical validation)
   → SimpleTES (candidate ranking) → PPE-V5.1Hybrid (formal proof)
   → AI-Scientist V2 (paper generation). 78%→65% end-to-end proof success rate,
-  70% time reduction vs standalone PPE. NEW v2.3: Stage −1 dual-use safety gateway,
+  70% time reduction vs standalone PPE. NEW v2.4: Stage −1 dual-use safety gateway,
   Stage 3.5 Hallucination Clipping (numeric claim ↔ Lean cross-reference + joint
   reliability objective), Stage 2 UCB exploration bonus, Stage 3 three-phase scaffolding.
-version: 2.3.0
+version: 2.4.0
 tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding]
 related_skills:
   - math-agent-framework (MAF stage 0)
@@ -224,15 +224,15 @@ checkable defects:
 | 3 | Axiom-count mismatch | CGICE V9.1: "14 axioms" vs 39 actual | WARN | L1 |
 | 4 | Phantom theorem (claimed but missing) | CGICE V9.1: "T4 fully verified" but no t4 in Lean | BLOCK | L1 |
 | 5 | `:= by trivial` stub | DeepSeek v4-flash tendency | WARN | L1 |
-| 7 | Numeric claim not in Lean (v2.3.0) | paper claims value absent/contradicted in proof.lean | WARN/BLOCK | L1 |
+| 7 | Numeric claim not in Lean (v2.4.0) | paper claims value absent/contradicted in proof.lean | WARN/BLOCK | L1 |
 
 **L2 LLM structural layer** (`proof_consistency_audit_l2.py`, DeepSeek) — cross-axiom,
 mathematical-judgment defects, escalated from L1 WARN candidates to BLOCK:
 
 | # | Defect class | Example (real) | Severity | Layer |
 |---|---|---|---|---|
-| 1 | Axiom self-contradiction (ex-falso) | CGICE V9.1: A6+A10 ⟹ `I_cycle=I_eq`, A17 ⟹ `I_cycle≠I_eq` | BLOCK | L2 |
-| 6 | Discrete spectrum on noncompact | CGICE V9.1 A3: λ_k=k·λ₁ on SL(6,C)/SU(6) or SU(3,3) | BLOCK | L2 |
+| 1 | Axiom self-contradiction (ex-falso) | CGICE V9.1: A6+A10 | BLOCK | L2 |
+| 6 | Discrete spectrum on noncompact | CGICE V9.1 A3 | BLOCK | L2 |
 
 **Gate rule**: any BLOCK (L1 or L2) stops the pipeline before paper generation; WARNs are recorded
 and forwarded to Stage 4 so the paper can honestly disclose them.
@@ -287,6 +287,3 @@ All five sub-skills must be installed:
 - **Stage 3.5b L2 audit**: `openai` + `DEEPSEEK_API_KEY` (structural judgment)
 - **Stage A recursive repair**: `openai` + `DEEPSEEK_API_KEY` + MathCode tools
 
-## Environment
-
-Requires `DEEPSEEK_API_KEY` for LLM calls across all stages.
