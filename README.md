@@ -18,9 +18,19 @@ related_skills:
   - ai-scientist-v2 (stage 4)
 ---
 
-# Scientific Discovery & Proof — Integrated Pipeline v2.3
+# Scientific Discovery & Proof — Integrated Pipeline v2.4
 
 Five-stage end-to-end pipeline for physics conjecture discovery → formal verification → publication.
+
+**NEW in v2.4.0** (from RSIHub + LeanMarathon evaluation, 2026-09-03): 增量嫁接两个
+「多智能体 harness」框架的高价值模块，**不改动现有 5 阶段管线**——
+① 新增 **Stage 3.5c 证明 DAG 审计**（`scripts/proof_dag_audit.py`，stdlib-only），
+从 Lean 文件提取 lemma/theorem 为节点的证明 DAG，检查两个现有扁平审计缺的新缺陷类：
+**冗余引理**（从未被下游使用）+ **未使用的 honest-axiom**（表演性诚实变体）+ 悬空引用。
+② 新增 **Stage 3.6 冻结评估器进化循环**（`scripts/stage36_evolution.py`，RSIHub 的
+select→evaluate→analyze→mutate→gate→record，用 MathCode/确定性评分当冻结评估器，
+DeepSeek v4-pro 诊断 + v4-flash 修复，严格改进门控 + append-only archive.jsonl 证据链）。
+完整评估与映射见 [`references/rsihub-leanmarathon-integration.md`](references/rsihub-leanmarathon-integration.md)。
 
 **NEW in v2.3.0** (from Gemini Co-Scientist, arXiv:2608.26701): four concrete upgrades —
 ① Stage −1 **Two-Layer Safety Gateway** (dual-use research screening, the single clearest
@@ -125,6 +135,17 @@ python proof_consistency_audit_l2.py \
   --paper /path/to/paper.txt \
   --expected-axioms 14 \
   --output /tmp/l2_audit.json   # 加 --demo 离线验证
+
+# Stage 3.5c proof DAG audit (证明 DAG 审计, stdlib-only, 新增 v2.4.0)
+python proof_dag_audit.py \
+  --lean /path/to/proof.lean \
+  --output /tmp/dag_report.json   # 冗余引理/未用 axiom/悬空引用
+
+# Stage 3.6 frozen evaluator evolution (冻结评估器进化, 新增 v2.4.0)
+python stage36_evolution.py \
+  --lean /path/to/proof.lean \
+  --generations 3 \
+  --output /tmp/stage36/          # 加 --dry-run 离线自测（只评估不调 LLM）
 
 # MAF bridge standalone
 cd /mnt/d/AI_for_Science/math-agent-framework

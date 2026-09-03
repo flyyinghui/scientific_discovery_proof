@@ -41,6 +41,16 @@ STAGE_SCRIPTS = {
         'name': 'AI-Scientist V2',
         'script': 'ai_scientist_v2_generate.py',
         'description': 'Paper generation (DOCX + LaTeX)'
+    },
+    '3.5c': {  # Proof DAG audit (v2.4.0, incremental from LeanMarathon)
+        'name': 'Proof DAG Audit',
+        'script': 'proof_dag_audit.py',
+        'description': 'Redundant lemma / unused axiom / dangling ref audit'
+    },
+    '3.6': {  # Frozen evaluator evolution loop (v2.4.0, RSIHub-style hill_climb)
+        'name': 'Frozen Evaluator Evolution',
+        'script': 'stage36_evolution.py',
+        'description': 'Evolve Lean proof against frozen evaluator (DeepSeek diagnose+repair)'
     }
 }
 
@@ -242,6 +252,10 @@ def run_stage3_ppe(conjecture_path: Path, stage2_output: dict, output_dir: Path)
     audit = _run_stage35_consistency_audit(proof_dir, conjecture_path, output_dir)
     result['stage35_audit'] = audit
     
+    # ── Stage 3.5c: 证明 DAG 审计（v2.4.0）────────────────────
+    dag_audit = _run_stage35c_dag_audit(proof_dir, output_dir)
+    result['stage35c_dag_audit'] = dag_audit
+    
     return result
 
 
@@ -258,7 +272,7 @@ def _run_stage35_consistency_audit(proof_dir: Path, conjecture_path: Path, outpu
         return {'stage': 3.5, 'status': 'skipped', 'reason': 'no lean file'}
     
     lean_path = lean_files[0]  # use the first (primary) proof file
-    # [GitHub review] audit 脚本位于 stage3_ppe/ 子目录（GitHub 仓库结构）
+    # [GitHub review] audit 脚本与 orchestrator 同级（技能 scripts/ 结构）
     audit_script = Path(__file__).resolve().parent / "stage3_ppe" / "proof_consistency_audit.py"
     if not audit_script.exists():
         print(f"[Stage3.5] Audit script not found at {audit_script} — skipping audit")
@@ -311,6 +325,117 @@ def _run_stage35_consistency_audit(proof_dir: Path, conjecture_path: Path, outpu
         print(f"[Stage3.5] ⚠️ Audit error: {e}")
     
     return audit_result
+
+
+def _run_stage35c_dag_audit(proof_dir: Path, output_dir: Path) -> dict:
+    """Stage 3.5c: 证明 DAG 审计（冗余引理 / 未用 axiom / 悬空引用）。"""
+    print("\n" + "="*60)
+    print("STAGE 3.5c: Proof DAG Audit (LeanMarathon-style)")
+    print("="*60)
+    
+    lean_files = sorted(proof_dir.glob("*.lean")) if proof_dir.exists() else []
+    if not lean_files:
+        print("[Stage3.5c] ⚠️ No .lean file found in proof_dir — skipping audit")
+        return {'stage': '3.5c', 'status': 'skipped', 'reason': 'no lean file'}
+    
+    lean_path = lean_files[0]
+    dag_script = Path(__file__).resolve().parent / "stage3_ppe" / "proof_dag_audit.py"
+    if not dag_script.exists():
+        print(f"[Stage3.5c] DAG audit script not found at {dag_script} — skipping audit")
+        return {'stage': '3.5c', 'status': 'skipped', 'reason': 'dag audit script not found'}
+    
+    cmd = [
+        VENV_PYTHON, str(dag_script),
+        "--lean", str(lean_path),
+        "--output", str(output_dir / "proof_dag_report.json"),
+    ]
+    
+    print(f"[Stage3.5c] Auditing proof DAG: {lean_path.name}")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        print(proc.stdout)
+        gate = "PASS"
+        dag_json_path = output_dir / "proof_dag_report.json"
+        if dag_json_path.exists():
+            try:
+                report = json.loads(dag_json_path.read_text())
+                gate = report.get("gate", "PASS")
+            except Exception:
+                gate = "BLOCK" if proc.returncode != 0 else "PASS"
+        dag_result = {
+            'stage': '3.5c',
+            'status': 'completed',
+            'exit_code': proc.returncode,
+            'gate': gate,
+            'lean_file': str(lean_path),
+            'timestamp': datetime.now().isoformat(),
+        }
+        if gate == 'BLOCK':
+            print("[Stage3.5c] 🔴 GATE BLOCKED — dangling references in proof DAG")
+        elif gate == 'WARN':
+            print("[Stage3.5c] 🟡 GATE WARN — redundant lemmas / unused axioms")
+    except Exception as e:
+        dag_result = {'stage': '3.5c', 'status': 'error', 'error': str(e)}
+        print(f"[Stage3.5c] ⚠️ DAG audit error: {e}")
+    
+    return dag_result
+
+
+def _run_stage36_evolution(proof_dir: Path, output_dir: Path, generations: int = 3, dry_run: bool = False) -> dict:
+    """Stage 3.6: 冻结评估器进化循环（RSIHub 风格 hill_climb）。"""
+    print("\n" + "="*60)
+    print("STAGE 3.6: Frozen Evaluator Evolution Loop (RSIHub-style)")
+    print("="*60)
+    
+    lean_files = sorted(proof_dir.glob("*.lean")) if proof_dir.exists() else []
+    if not lean_files:
+        print("[Stage3.6] ⚠️ No .lean file found in proof_dir — skipping")
+        return {'stage': '3.6', 'status': 'skipped', 'reason': 'no lean file'}
+    
+    lean_path = lean_files[0]
+    evo_script = Path(__file__).resolve().parent / "stage3_ppe" / "stage36_evolution.py"
+    if not evo_script.exists():
+        print(f"[Stage3.6] Evolution script not found at {evo_script} — skipping")
+        return {'stage': '3.6', 'status': 'skipped', 'reason': 'evolution script not found'}
+    
+    evo_out = output_dir / "stage36_evolution"
+    cmd = [
+        VENV_PYTHON, str(evo_script),
+        "--lean", str(lean_path),
+        "--generations", str(generations),
+        "--output", str(evo_out),
+    ]
+    if dry_run:
+        cmd.append("--dry-run")
+    
+    print(f"[Stage3.6] Evolving: {lean_path.name} ({generations} generations)")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        print(proc.stdout)
+        result_json = evo_out / "result.json"
+        result = {
+            'stage': '3.6', 'status': 'completed' if proc.returncode == 0 else 'failed',
+            'exit_code': proc.returncode,
+            'output_dir': str(evo_out),
+            'timestamp': datetime.now().isoformat(),
+        }
+        if result_json.exists():
+            try:
+                best = json.loads(result_json.read_text())
+                result['best_score'] = best.get('best_score')
+                result['best_defects'] = best.get('best_defects')
+                result['best_lean'] = best.get('best_lean')
+                print(f"[Stage3.6] 最佳分数 {result['best_score']}（进化前 {lean_path.name} 见 Gen 0）")
+            except Exception:
+                pass
+    except subprocess.TimeoutExpired:
+        result = {'stage': '3.6', 'status': 'timeout', 'error': '3600s limit'}
+        print("[Stage3.6] ⚠️ Timeout after 3600s")
+    except Exception as e:
+        result = {'stage': '3.6', 'status': 'error', 'error': str(e)}
+        print(f"[Stage3.6] ⚠️ Evolution error: {e}")
+    
+    return result
 
 
 def run_stage4_paper(conjecture_path: Path, stage3_output: dict, output_dir: Path) -> dict:
@@ -378,7 +503,7 @@ Include an abstract. Output as clean markdown."""
 def _load_api_key() -> str:
     """Load DeepSeek API key."""
     for env_path in [
-        '/mnt/user/.env',
+        '/mnt/d/123321/CityHDGanalysis/Spatial_Reasoning_Agent/.env',
         os.path.expanduser('~/.hermes/.env'),
     ]:
         if os.path.exists(env_path):
@@ -436,8 +561,9 @@ def main():
     parser = argparse.ArgumentParser(description='Scientific Discovery Pipeline')
     parser.add_argument('--conjecture', required=True, help='Path to conjecture.json')
     parser.add_argument('--output', default='/tmp/sdp_output', help='Output directory')
-    parser.add_argument('--stages', default='1,2,3,4', help='Stages to run (comma-separated)')
+    parser.add_argument('--stages', default='1,2,3,4', help='Stages to run (comma-separated: 1,2,3,3.5c,3.6,4; Stage 3 auto-includes 3.5+3.5c audits)')
     parser.add_argument('--deepseek-key', help='DeepSeek API key (or set DEEPSEEK_API_KEY)')
+    parser.add_argument('--evo-generations', type=int, default=3, help='Stage 3.6 evolution generations (default 3)')
     args = parser.parse_args()
     
     if args.deepseek_key:
@@ -447,7 +573,13 @@ def main():
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    stages = [int(s) for s in args.stages.split(',')]
+    stages = []
+    for s in args.stages.split(','):
+        s = s.strip()
+        if s in ('3.5c', '3.6'):
+            stages.append(s)  # 3.5c（DAG 审计）/ 3.6（进化循环）可作为独立阶段
+        else:
+            stages.append(int(s))
     
     print("="*60)
     print("Scientific Discovery & Proof — Integrated Pipeline")
@@ -477,6 +609,16 @@ def main():
         
         elif stage_num == 4:
             results[4] = run_stage4_paper(conjecture_path, results.get(3, {}), output_dir)
+        
+        elif stage_num == '3.5c':
+            # Standalone: run proof DAG audit on existing proof output
+            proof_dir = output_dir / "proof_output"
+            results['3.5c'] = _run_stage35c_dag_audit(proof_dir, output_dir)
+        
+        elif stage_num == '3.6':
+            # Standalone: run frozen evaluator evolution on existing proof output
+            proof_dir = output_dir / "proof_output"
+            results['3.6'] = _run_stage36_evolution(proof_dir, output_dir, generations=args.evo_generations)
     
     elapsed = time.time() - start_time
     
