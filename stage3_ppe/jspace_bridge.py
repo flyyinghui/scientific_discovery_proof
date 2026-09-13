@@ -152,7 +152,7 @@ if __name__ == "__main__":
     parser.add_argument("--conjecture", help="Conjecture JSON to extract concepts from")
     parser.add_argument("--concepts", nargs="*", help="Custom concept list")
     parser.add_argument("--output", default="jspace_bridge.json")
-    parser.add_argument("--brain-data", default="/mnt/d/ai_for_science/neural_memory_data")
+    parser.add_argument("--brain-data", default="<brain-data-dir>")
     parser.add_argument("--mock", action="store_true", help="Use mock values (no brain needed)")
     args = parser.parse_args()
     
@@ -170,7 +170,7 @@ if __name__ == "__main__":
     if not args.mock:
         try:
             import sys
-            sys.path.insert(0, "/mnt/d/ai_for_science")
+            sys.path.insert(0, "~/ai_for_science")
             from neural_memory_brain.brain import NeuralMemoryBrain
             brain = NeuralMemoryBrain(data_dir=args.brain_data)
             stats = brain.graph.get_stats()

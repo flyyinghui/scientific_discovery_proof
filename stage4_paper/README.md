@@ -17,7 +17,7 @@ Four-phase pipeline:
 ### Path A: Full BFTS (for ML experiments)
 
 ```bash
-cd /mnt/d/AI_for_Science/AI-Scientist-v2
+cd ~/AI_for_Science/AI-Scientist-v2
 export DEEPSEEK_API_KEY="sk-..."
 
 python launch_scientist_bfts.py \

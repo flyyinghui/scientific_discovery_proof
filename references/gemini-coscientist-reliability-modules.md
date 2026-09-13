@@ -7,7 +7,7 @@ materials science (MXene/TMD CVD synthesis), biology (E. coli swarming predictio
 computer science (Agent_H medical AI architecture discovery).
 
 **Fed into brain**: 2026-08-29, +40 neurons (14 concept / 13 finding / 13 evidence), source `arXiv:2608.26701`.
-**Code generated**: `/mnt/d/ai_for_science/paper_code/2608.26701/code.py` (34.8K chars, 7 algorithms, runs clean).
+**Code generated**: `~/ai_for_science/paper_code/2608.26701/code.py` (34.8K chars, 7 algorithms, runs clean).
 
 ---
 

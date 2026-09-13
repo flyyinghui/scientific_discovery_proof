@@ -4,12 +4,12 @@
 
 ### Stage 0 — Math Agent Framework
 - **Repository**: [nousresearch/math-agent-framework](https://github.com/nousresearch/math-agent-framework)
-- **Copy on disk**: `D:\AI_for_Science\math-agent-framework\`
+- **Copy on disk**: `<workspace>\math-agent-framework\`
 - **Description**: Bridge between LLM conceptual reasoning and deterministic symbolic computation. 5-level verification pipeline (symbolic → FOC/SOC → boundary → counterexample → chain consistency). Multi-agent adversarial verification (Proposer+Critic+Judge). MCP-ready with 60+ auto-registered tools.
 
 ### Stage 4 — AI-Scientist V2
 - **Repository**: [SakanaAI/AI-Scientist-v2](https://github.com/SakanaAI/AI-Scientist-v2)
-- **Copy on disk**: `D:\AI_for_Science\AI-Scientist-v2\`
+- **Copy on disk**: `<workspace>\AI-Scientist-v2\`
 - **Description**: Workshop-level automated scientific discovery. BFTS (Best-First Tree Search) experimentation, automatic LaTeX paper writing, LLM peer review. First system with AI-generated papers accepted at ML workshops.
 
 ## Supporting Infrastructure
@@ -49,9 +49,9 @@ All components are registered as Hermes Agent skills at `~/.hermes/skills/`:
 
 | Component | Disk Path | GitHub |
 |:---|---|:---|
-| Math Agent Framework | `D:\AI_for_Science\math-agent-framework\` | `nousresearch/math-agent-framework` |
-| AI-Scientist V2 | `D:\AI_for_Science\AI-Scientist-v2\` | `SakanaAI/AI-Scientist-v2` |
+| Math Agent Framework | `<workspace>\math-agent-framework\` | `nousresearch/math-agent-framework` |
+| AI-Scientist V2 | `<workspace>\AI-Scientist-v2\` | `SakanaAI/AI-Scientist-v2` |
 | PPE Core | `D:\ai_for_science\physics_proof_engine\` | — |
 | Neural Memory Brain | `D:\ai_for_science\neural_memory_brain\` | — |
-| Lean Formalizations | `D:\AI_for_Science\lean_formalizations\` | `leanprover-community/mathlib4` |
+| Lean Formalizations | `<workspace>\lean_formalizations\` | `leanprover-community/mathlib4` |
 | MathCode V2 | `D:\ai_for_science\mathcode\` | — |

@@ -101,12 +101,12 @@ lean -o HonestAttr.olean HonestAttr.lean
 ### CGICE 编译命令（复用已编译 mathlib，避免 4-6h 重编译）
 
 ```bash
-export PATH=/root/.elan/bin:$PATH            # lake 不在默认 PATH
-cd /mnt/d/AI_for_Science/Mathlib_setup/mathlib4-master
+export PATH=$HOME/.elan/bin:$PATH            # lake 不在默认 PATH
+cd <mathlib-dir>
 # 先编译 HonestAttr.olean
-lean -o "/mnt/c/.../cgice/HonestAttr.olean" "/mnt/c/.../cgice/HonestAttr.lean"
+lean -o "<cgice-dir>/HonestAttr.olean" "<cgice-dir>/HonestAttr.lean"
 # 再编译主文件（LEAN_PATH 指向 cgice 目录以找到 HonestAttr.olean）
-lake env sh -c 'LEAN_PATH="/mnt/c/.../cgice:$LEAN_PATH" lean "/mnt/c/.../cgice/cgice_proof_v9.lean"'
+lake env sh -c 'LEAN_PATH="<cgice-dir>:$LEAN_PATH" lean "<cgice-dir>/cgice_proof_v9.lean"'
 ```
 
 ### DAG 审计 attribute 假阳性修复
@@ -115,7 +115,7 @@ lake env sh -c 'LEAN_PATH="/mnt/c/.../cgice:$LEAN_PATH" lean "/mnt/c/.../cgice/c
 
 ## 三、相关文件
 
-- Lean：`C:\Users\Think\Desktop\AI论文\cgice\cgice_proof_v9.lean`（1010→1040 行）
-- HonestAttr：`C:\Users\Think\Desktop\AI论文\cgice\HonestAttr.lean`（新建）
+- Lean：`<paper-dir>\cgice\cgice_proof_v9.lean`（1010→1040 行）
+- HonestAttr：`<paper-dir>\cgice\HonestAttr.lean`（新建）
 - 论文：`cgice_paper_v9_fop.md`（§5.5 待办已落地，可同步）
 - DAG 审计：`scripts/proof_dag_audit.py`（已修复 attribute 假阳性）

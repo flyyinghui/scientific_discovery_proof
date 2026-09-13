@@ -74,6 +74,6 @@ RSIHub 的「评估器被冻结 + 变异有界 + 证据持久」正好能包裹�
 
 ## 附：测试环境约束
 
-- RSIHub：`requires-python >=3.12`，当前 Hermes venv 3.11.15 → 无法 pip 安装，仅提炼概念（若需实跑，可建独立 3.12 venv）。
+- RSIHub：`requires-python >=3.12`。**已安装（2026-09-04）**：`~/AI_for_Science/RSIHub/`，独立 Python 3.12.3 venv 在 `.venv/`（`uv sync --all-groups` 装 225 包，含 harbor==0.18.0/fastapi/pydantic/typer/uvicorn + dev 组 pytest/ruff/ty）。CLI `evolve`（`evolve.cli:main`）可用，命令：init/preflight/run/finalize/assert-run/fork/commit/eval/retry/record/surface-check/smoke/status/report/doctor/view/repair/verify/recipe/operator。完整 benchmark 配方（aevolve/ahe/gepa/hyperagents…）需 Docker daemon + OpenAI API key + Terminal-Bench 数据集；核心框架（80 模块 + 冻结评估器 SDK）无需 Docker 即可 import 使用。
 - LeanMarathon：完整 harness 需 Codex CLI 0.128.0 + Slurm + 4 个外部 MCP server + LeanArchitect 项目根 → 无法在本机跑通，但其 verify_blueprint.py 与 blueprint-format 契约是 stdlib 可复用的。
 - 两者 license：RSIHub Apache 2.0，LeanMarathon 见其 LICENSE。

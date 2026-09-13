@@ -58,5 +58,5 @@ verdict = bridge.adversarial_verify(claim, context)
 
 ## Related
 
-- **Framework**: math-agent-framework (D:\AI_for_Science\math-agent-framework\)
+- **Framework**: math-agent-framework (<workspace>\math-agent-framework\)
 - **Integration doc**: `../references/papers.md` — MAF-SDP Integration details
