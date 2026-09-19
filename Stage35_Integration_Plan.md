@@ -1,7 +1,7 @@
 # Stage 3.5 形式化证明自洽性审计门 — 与 scientific-discovery-proof 整合方案
 
 **版本**: 1.0 | **日期**: 2026-08-17
-**作者**: Author
+**作者**: 灰因斯坦 (Grey Turing)
 **状态**: 已集成并实测验证
 
 ---
@@ -98,7 +98,7 @@ Stage 4   AI-Scientist V2（论文生成）
 ### 4.1 独立使用
 
 ```bash
-cd <skill-dir>/scripts
+cd ./scripts
 python proof_consistency_audit.py \
   --lean /path/to/proof.lean \
   --paper /path/to/paper.txt \      # 可选，用于检测定理虚假声称

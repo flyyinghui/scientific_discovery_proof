@@ -194,6 +194,77 @@ def audit(lean_path: str, paper_path: str = None,
         findings.append({"type": "discrete_spectrum_on_noncompact", "severity": "WARN",
                          "msg": msg})
 
+    # ── 检测 7-9: RSIAgent 失败模式映射 (v2.8.0) ─────────────
+    # [RSIAgent arXiv:2609.15364] 递归自我改进的 3 类失败模式 → 3 条新检测规则：
+    #   7. 未挑战假设 (unchallenged axiom)     ← "unchallenged assumptions" (25%)
+    #   8. 不确定性降级 (uncertainty downgrade) ← "uncertainty not enforced" (33%)
+    #   9. 规则范围丢失 (rule scope loss)       ← "rule scope loss" (67%)
+
+    # ── 检测 7: 未挑战假设 (unchallenged axiom) ──────────────
+    # honest-axiom 被声明但从未被任何地方引用（声明行之外 0 次出现）=
+    # 冗余假设或表演性诚实变体。用全文件计数（含定理参数类型签名、
+    # exact/apply 引用），避免误报「作为条件定理前提被引用的 axiom」。
+    axiom_names = re.findall(r'^\s*axiom\s+([A-Za-z_][A-Za-z0-9_]*)\b', lean, re.M)
+    unchallenged = []
+    for a in axiom_names:
+        # 统计 a 在全文件（含类型签名/证明体）的出现次数
+        cnt = len(re.findall(rf'\b{re.escape(a)}\b', lean))
+        if cnt <= 1:  # 只在声明行出现 = 从未被引用
+            unchallenged.append(a)
+    if unchallenged:
+        msg = (f"未挑战假设：{len(unchallenged)} 个 axiom 全文件中仅声明处出现一次"
+               f"（从未被任何 theorem/lemma 的签名或证明体引用 = 冗余假设/表演性诚实）: "
+               f"{sorted(unchallenged)[:8]}")
+        warns.append(msg)
+        findings.append({"type": "unchallenged_axiom", "severity": "WARN",
+                         "unchallenged": sorted(unchallenged), "msg": msg})
+
+    # ── 检测 8: 不确定性降级 (uncertainty downgrade) ─────────
+    # paper 用确定性动词描述 lean 里实际是 axiom/opaque（honest-axiom）的声明。
+    if paper_path and Path(paper_path).exists():
+        paper = Path(paper_path).read_text(encoding="utf-8", errors="replace")
+        proved_claims = set(re.findall(
+            r'(?:we\s+prove|is\s+proven|is\s+proved|is\s+established|we\s+establish|'
+            r'\bproved\b|\bproven\b|\bestablished\b)\s+`?([A-Za-z_][A-Za-z0-9_]*)`?',
+            paper, re.I))
+        proved_claims = {c for c in proved_claims
+                         if c.lower() not in _EN_WORDS and not re.match(r'^\d+$', c)}
+        axiom_opaque_names = set(axiom_names) | set(
+            re.findall(r'^\s*opaque\s+([A-Za-z_][A-Za-z0-9_]*)', lean, re.M))
+        downgraded = proved_claims & axiom_opaque_names
+        if downgraded:
+            msg = (f"不确定性降级：论文用确定性动词（prove/proven/established）描述 "
+                   f"{len(downgraded)} 个实为 honest-axiom/opaque 的声明"
+                   f"（诚实标注在论文传播中被降级）: {sorted(downgraded)[:8]}")
+            warns.append(msg)
+            findings.append({"type": "uncertainty_downgrade", "severity": "WARN",
+                             "downgraded": sorted(downgraded), "msg": msg})
+
+    # ── 检测 9: 规则范围丢失 (rule scope loss) ───────────────
+    # paper 把条件定理（带显式前提参数的 theorem）表述为无条件结论。
+    if paper_path and Path(paper_path).exists():
+        paper = Path(paper_path).read_text(encoding="utf-8", errors="replace")
+        conditional_theorems = set(re.findall(
+            r'^\s*theorem\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(', lean, re.M))
+        _scope_hits = 0
+        for tname in sorted(conditional_theorems):
+            for m in re.finditer(rf'[^.\n]*\b{re.escape(tname)}\b[^.\n]*\.', paper):
+                sentence = m.group(0)
+                if re.search(r'\bgiven\b|\bassuming\b|\bconditional\b|\bunder\b|'
+                             r'\bprovided\b|\bif\b|\bwhen\b|\bsubject\b', sentence, re.I):
+                    continue  # 有条件修饰，范围保留，OK
+                msg = (f"规则范围丢失：条件定理 `{tname}` 在论文中被无条件表述"
+                       f"（缺 given/assuming/conditional 修饰）: {sentence.strip()[:110]}")
+                warns.append(msg)
+                findings.append({"type": "rule_scope_loss", "severity": "WARN",
+                                 "theorem": tname, "sentence": sentence.strip()[:140],
+                                 "msg": msg})
+                _scope_hits += 1
+                break  # 每个定理只报一次
+        if _scope_hits == 0:
+            # 无规则范围丢失，记录 INFO 供审计追踪
+            pass
+
     # ── 汇总 ────────────────────────────────────────────────
     gate = "BLOCK" if blocks else ("WARN" if warns else "PASS")
 

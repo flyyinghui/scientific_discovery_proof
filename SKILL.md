@@ -8,8 +8,8 @@ description: >-
   70% time reduction vs standalone PPE. NEW v2.3: Stage −1 dual-use safety gateway,
   Stage 3.5 Hallucination Clipping (numeric claim ↔ Lean cross-reference + joint
   reliability objective), Stage 2 UCB exploration bonus, Stage 3 three-phase scaffolding.
-version: 2.6.1
-tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding]
+version: 2.8.0
+tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding, rsiagent, curriculum, exploration]
 related_skills:
   - math-agent-framework (MAF stage 0)
   - SciExplorer (stage 1)
@@ -18,9 +18,38 @@ related_skills:
   - ai-scientist-v2 (stage 4)
 ---
 
-# Scientific Discovery & Proof — Integrated Pipeline v2.6
+# Scientific Discovery & Proof — Integrated Pipeline v2.8
 
 Five-stage end-to-end pipeline for physics conjecture discovery → formal verification → publication.
+
+**NEW in v2.8.0** (from RSIAgent, arXiv:2609.15364, 2026-09-19): **Stage 2.5 Curriculum Planner +
+Stage 3.5 三条失败模式检测规则 + Stage 3.6d 深挖 + archive 因果三元组**。把 RSIAgent 的
+「curriculum/actor/verifier 三智能体 + broad-then-deep 探索 + 因果记忆」移植为四个增量，
+**不动现有五阶段管线**：
+① **Stage 2.5 Curriculum Planner**（新脚本 `scripts/curriculum_planner.py`）——在 SimpleTES 排名后、
+PPE 证明前，生成「证明变体任务队列」五大类型：weaken_premise（弱化前提）/ strengthen_premise（强化前提）/
+boundary_case（边界反例）/ axiom_recombine（公理重组合）/ stress_test（压力测试）。把证明从「被动走固定
+管线」升级为「课程驱动的主动探索」，在证明前暴露隐藏约束、边界条件、未挑战假设。
+② **Stage 3.5 三条新检测规则**（`proof_consistency_audit.py` 检测 7/8/9）——映射 RSIAgent 三大失败模式：
+unchallenged_axiom（未挑战假设，25%）/ uncertainty_downgrade（不确定性降级，33%）/ rule_scope_loss
+（规则范围丢失，67%）。
+③ **Stage 3.6d Deep Refinement (DRS)**（新脚本 `scripts/deep_refinement.py`）——RSIAgent broad-then-deep
+的 deep 阶段：聚焦单一历史盲区缺陷，逐轮递增难度（基础修复→边界显式化→反例搜索→最小充分集），
+是 Stage 3.6（broad 综合进化）的补充。
+④ **archive.jsonl 因果三元组（P3）**（`replay_strategies.py` 新增 `defect_signature` + `causal_rules` +
+`condition_match`；`stage36_evolution.py` record 新增 `condition` 字段）——把「被动记录」升级为
+actions→conditions→consequences 可复用因果记忆，变异前注入「相同缺陷签名下的成功先例」。
+完整记录见 [`references/rsiagent-integration.md`](references/rsiagent-integration.md)。
+
+**NEW in v2.7.0** (from Dream-RSI, arXiv:2609.14858, 2026-09-17): **Stage 3.6 重放模拟器增强（P0-P2）**。
+把 `archive.jsonl` 从「被动记录」升级为「主动重放预筛选器」（Dream-RSI 核心洞察：发现历史
+本身是可重放的模拟器）。① **P0 replay simulator**：新增 `scripts/replay_strategies.py`
+（`ReplaySimulator` 类，统计各变异策略历史成功率 + 对各类缺陷的修复率，ε-greedy 排序推荐，
+针对性是硬门槛）② **P1 off-policy 反馈**：盲区检测（历史从未修复成功的缺陷类型）注入诊断
+prompt ③ **P2 变异策略显式化**：单一「诊断→修复」拆成 5 个可评估策略（repair_dangling /
+axiomatize / tactic_complete / lemma_decompose / deduplicate），archive.jsonl 新增
+`mutation_strategy` + `defects_before` 字段。完整记录见
+[`references/dream-rsi-replay-simulator-integration.md`](references/dream-rsi-replay-simulator-integration.md)。
 
 **NEW in v2.6.0** (from Triple-GW V17 P0-5/6/7 repair + four-paper unification, 2026-09-04):
 **四论文统一性交叉扫描 + g_TC² 谱隙角色分工修复**。发现三峰引力波 V17 与三大时空相 V17
@@ -103,6 +132,13 @@ axiom-count mismatch, phantom theorems, `:= by trivial` stubs, and discrete-spec
 │   ├─ ★UCB 探索奖励 (v2.3.0): 欠采样假设 +c·√(ln N / n)          │
 │   └─ 输出: Top-3 精英候选 + 评分 + 排名理由                     │
 ├──────────────────────────────────────────────────────────────────┤
+│ Stage 2.5 — Curriculum Planner (NEW v2.8.0, RSIAgent)          │
+│   ├─ 生成证明变体任务队列（课程驱动主动探索）                     │
+│   ├─ weaken/strengthen/boundary/recombine/stress 五类型          │
+│   ├─ 输入: conjecture + 排名 + archive.jsonl 历史证据            │
+│   ├─ LLM (v4-flash) 生成，无 key 回退确定性 mock 模板            │
+│   └─ 输出: stage25_curriculum.json (证明变体任务队列)            │
+├──────────────────────────────────────────────────────────────────┤
 │ Stage 3 — PPE-V5.1Hybrid: Deep Formal Proof                     │
 │   ├─ J-space 桥接矩阵 (Brain 170K 神经元)                        │
 │   ├─ MCTS + ABC Bee Colony 双算法搜索                           │
@@ -134,10 +170,17 @@ axiom-count mismatch, phantom theorems, `:= by trivial` stubs, and discrete-spec
 python pipeline_orchestrator.py \
   --conjecture /path/to/conjecture.json \
   --output /path/to/output/ \
-  --stages -1,0,1,2,3,4 \
+  --stages -1,0,1,2,2.5,3,4 \
   --enable-maf \
   --enable-sciexplorer \
-  --deepseek-key <your-api-key>
+  --deepseek-key sk-...
+
+# Stage 2.5 curriculum planner standalone (课程规划器, 新增 v2.8.0, RSIAgent)
+python curriculum_planner.py \
+  --conjecture /path/to/conjecture.json \
+  --ranked stage2_ranked_candidates.json \
+  --archive archive.jsonl \
+  --output /tmp/stage25_curriculum.json   # 加 --mock 离线确定性模板
 
 # Stage 3.5 L1 consistency audit standalone (机械层, stdlib-only, 快)
 cd stage3_ppe
@@ -165,10 +208,17 @@ python stage36_evolution.py \
   --generations 3 \
   --output /tmp/stage36/          # 加 --dry-run 离线自测（只评估不调 LLM）
 
+# Stage 3.6d deep refinement (DRS 深挖, 新增 v2.8.0, RSIAgent broad-then-deep)
+python deep_refinement.py \
+  --lean /path/to/proof.lean \
+  --archive /tmp/stage36/archive.jsonl \
+  --rounds 3 \
+  --output /tmp/deep_refine/      # 加 --dry-run 离线自测（只评估不调 LLM）
+
 # Stage 3.6b — 接入 RSIHub（正式集成，2026-09-04）
 # 用 RSIHub 真实 operator 类 + 冻结评估器 + archive.jsonl 做 Lean 证据链自我进化
 cd ~/AI_for_Science/RSIHub
-.venv/bin/python <skill-dir>/scripts/rsihub_lean_bridge.py \
+.venv/bin/python ./scripts/rsihub_lean_bridge.py \
   --lean /path/to/proof.lean --generations 3 --output /tmp/lean_evo [--dry-run]
 # 详见 references/rsihub-lean-bridge.md + skill: rsihub
 

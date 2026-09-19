@@ -83,7 +83,7 @@ hidden axiom — consistent with the v2.5.0 "conditional-theorem refactoring" pa
 ## Verification commands
 
 ```bash
-cd /path/to/cgice && export PATH="$HOME/.elan/bin:$PATH"
+cd /path/to/cgice && export PATH="/root/.elan/bin:$PATH"
 lake build 2>&1 | grep -E "error|Build completed|Build failed"   # expect "Build completed successfully"
 grep -cE 'sorry|admit' cgice_proof_v10.lean                        # expect 0
 grep -cE '^axiom ' cgice_proof_v10.lean                            # expect 0

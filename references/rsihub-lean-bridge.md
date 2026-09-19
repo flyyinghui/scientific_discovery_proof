@@ -18,7 +18,7 @@
 
 ```bash
 cd ~/AI_for_Science/RSIHub
-.venv/bin/python <skill-dir>/scripts/rsihub_lean_bridge.py \
+.venv/bin/python ./scripts/rsihub_lean_bridge.py \
     --lean /path/to/proof.lean \
     --generations 3 \
     --output /tmp/lean_evo \

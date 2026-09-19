@@ -19,7 +19,7 @@ from datetime import datetime
 # ── Configuration ────────────────────────────────────────────
 
 PIPELINE_ROOT = Path(__file__).resolve().parent.parent
-PROJECT_ROOT = Path(os.environ.get("SDP_WORKSPACE", str(Path.home() / "ai_for_science")))
+PROJECT_ROOT = Path("~/ai_for_science")
 
 STAGE_SCRIPTS = {
     1: {  # SciExplorer
@@ -42,6 +42,11 @@ STAGE_SCRIPTS = {
         'script': 'ai_scientist_v2_generate.py',
         'description': 'Paper generation (DOCX + LaTeX)'
     },
+    '2.5': {  # Curriculum Planner (v2.8.0, from RSIAgent)
+        'name': 'Curriculum Planner',
+        'script': 'curriculum_planner.py',
+        'description': 'Proof-variant task queue (weaken/strengthen/boundary/recombine/stress)'
+    },
     '3.5c': {  # Proof DAG audit (v2.4.0, incremental from LeanMarathon)
         'name': 'Proof DAG Audit',
         'script': 'proof_dag_audit.py',
@@ -51,11 +56,16 @@ STAGE_SCRIPTS = {
         'name': 'Frozen Evaluator Evolution',
         'script': 'stage36_evolution.py',
         'description': 'Evolve Lean proof against frozen evaluator (DeepSeek diagnose+repair)'
+    },
+    '3.6d': {  # Deep Refinement DRS (v2.8.0, RSIAgent broad-then-deep)
+        'name': 'Deep Refinement (DRS)',
+        'script': 'deep_refinement.py',
+        'description': 'Focus single blind-spot defect, escalate difficulty per round'
     }
 }
 
 # Venv path for PPE scripts
-VENV_PYTHON = os.environ.get("HERMES_PYTHON", sys.executable)
+VENV_PYTHON = "/usr/local/lib/hermes-agent-v14/venv/bin/python"
 
 # ── Stage Implementations ────────────────────────────────────
 
@@ -187,6 +197,60 @@ def run_stage2_simpletes(conjecture_path: Path, stage1_output: dict, output_dir:
     except ImportError as e:
         print(f"[Stage2] SimpleTES not available ({e}) — skipping ranking")
         return {'stage': 2, 'status': 'skipped', 'reason': str(e)}
+
+
+def run_stage25_curriculum(conjecture_path: Path, stage2_output: dict, output_dir: Path) -> dict:
+    """Stage 2.5: Curriculum Planner (RSIAgent) — 生成证明变体任务队列。"""
+    print("\n" + "="*60)
+    print("STAGE 2.5: Curriculum Planner — Proof-Variant Task Queue")
+    print("="*60)
+
+    curriculum_path = output_dir / "stage25_curriculum.json"
+    planner_script = Path(__file__).resolve().parent / "curriculum_planner.py"
+
+    if not planner_script.exists():
+        print("[Stage2.5] ⚠️ curriculum_planner.py not found — skipping")
+        return {'stage': 2.5, 'status': 'skipped', 'reason': 'script not found'}
+
+    ranked_path = output_dir / "stage2_ranked_candidates.json"
+    archive_path = output_dir / "archive.jsonl"
+
+    cmd = [
+        VENV_PYTHON, str(planner_script),
+        "--conjecture", str(conjecture_path),
+        "--output", str(curriculum_path),
+    ]
+    if ranked_path.exists():
+        cmd += ["--ranked", str(ranked_path)]
+    if archive_path.exists():
+        cmd += ["--archive", str(archive_path)]
+
+    print(f"[Stage2.5] Generating curriculum: {conjecture_path.name}")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        print(proc.stdout)
+        if proc.returncode != 0:
+            print(f"[Stage2.5] ⚠️ exit={proc.returncode}: {proc.stderr[-400:]}")
+        curriculum = {}
+        if curriculum_path.exists():
+            curriculum = json.loads(curriculum_path.read_text(encoding='utf-8'))
+        result = {
+            'stage': 2.5,
+            'status': 'completed' if curriculum else 'failed',
+            'mode': curriculum.get('mode', '?'),
+            'n_tasks': curriculum.get('n_tasks', 0),
+            'tasks': curriculum.get('tasks', []),
+            'curriculum_path': str(curriculum_path),
+            'timestamp': datetime.now().isoformat(),
+        }
+    except subprocess.TimeoutExpired:
+        result = {'stage': 2.5, 'status': 'timeout', 'error': '300s limit'}
+        print("[Stage2.5] ⚠️ Timeout after 300s")
+
+    with open(curriculum_path, 'w') as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
+    print(f"[Stage2.5] Curriculum: {result.get('n_tasks', 0)} tasks ({result.get('mode', '?')})")
+    return result
 
 
 def run_stage3_ppe(conjecture_path: Path, stage2_output: dict, output_dir: Path) -> dict:
@@ -438,6 +502,69 @@ def _run_stage36_evolution(proof_dir: Path, output_dir: Path, generations: int =
     return result
 
 
+def _run_stage36d_deep_refinement(proof_dir: Path, output_dir: Path, rounds: int = 3, dry_run: bool = False) -> dict:
+    """Stage 3.6d: Deep Refinement (DRS, RSIAgent broad-then-deep deep 阶段)。"""
+    print("\n" + "="*60)
+    print("STAGE 3.6d: Deep Refinement (DRS, RSIAgent broad-then-deep)")
+    print("="*60)
+
+    lean_files = sorted(proof_dir.glob("*.lean")) if proof_dir.exists() else []
+    if not lean_files:
+        print("[Stage3.6d] ⚠️ No .lean file found in proof_dir — skipping")
+        return {'stage': '3.6d', 'status': 'skipped', 'reason': 'no lean file'}
+
+    lean_path = lean_files[0]
+    drs_script = Path(__file__).resolve().parent / "deep_refinement.py"
+    if not drs_script.exists():
+        print(f"[Stage3.6d] deep_refinement.py not found at {drs_script} — skipping")
+        return {'stage': '3.6d', 'status': 'skipped', 'reason': 'script not found'}
+
+    # archive 来源：优先用 Stage 3.6 的 archive（共享因果记忆）
+    archive = output_dir / "stage36_evolution" / "archive.jsonl"
+    drs_out = output_dir / "stage36d_deep_refine"
+
+    cmd = [
+        VENV_PYTHON, str(drs_script),
+        "--lean", str(lean_path),
+        "--rounds", str(rounds),
+        "--output", str(drs_out),
+    ]
+    if archive.exists():
+        cmd += ["--archive", str(archive)]
+    if dry_run:
+        cmd.append("--dry-run")
+
+    print(f"[Stage3.6d] Deep refining: {lean_path.name} ({rounds} rounds)")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        print(proc.stdout)
+        result_json = drs_out / "result.json"
+        result = {
+            'stage': '3.6d', 'status': 'completed' if proc.returncode == 0 else 'failed',
+            'exit_code': proc.returncode,
+            'output_dir': str(drs_out),
+            'timestamp': datetime.now().isoformat(),
+        }
+        if result_json.exists():
+            try:
+                best = json.loads(result_json.read_text())
+                result['best_score'] = best.get('best_score')
+                result['best_defects'] = best.get('best_defects')
+                result['best_lean'] = best.get('best_lean')
+                result['n_causal_rules'] = len(best.get('causal_rules', []))
+                print(f"[Stage3.6d] 最佳分数 {result['best_score']}，因果规则 {result['n_causal_rules']} 条")
+            except Exception:
+                pass
+    except subprocess.TimeoutExpired:
+        result = {'stage': '3.6d', 'status': 'timeout', 'error': '3600s limit'}
+        print("[Stage3.6d] ⚠️ Timeout after 3600s")
+    except Exception as e:
+        result = {'stage': '3.6d', 'status': 'error', 'error': str(e)}
+        print(f"[Stage3.6d] ⚠️ Deep refinement error: {e}")
+
+    return result
+
+
 def run_stage4_paper(conjecture_path: Path, stage3_output: dict, output_dir: Path) -> dict:
     """Stage 4: AI-Scientist V2 paper generation."""
     print("\n" + "="*60)
@@ -503,6 +630,7 @@ Include an abstract. Output as clean markdown."""
 def _load_api_key() -> str:
     """Load DeepSeek API key."""
     for env_path in [
+        '~/.hermes/.env',
         os.path.expanduser('~/.hermes/.env'),
     ]:
         if os.path.exists(env_path):
@@ -575,8 +703,8 @@ def main():
     stages = []
     for s in args.stages.split(','):
         s = s.strip()
-        if s in ('3.5c', '3.6'):
-            stages.append(s)  # 3.5c（DAG 审计）/ 3.6（进化循环）可作为独立阶段
+        if s in ('2.5', '3.5c', '3.6', '3.6d'):
+            stages.append(s)  # 2.5（课程规划）/ 3.5c（DAG 审计）/ 3.6（进化）/ 3.6d（深挖）独立阶段
         else:
             stages.append(int(s))
     
@@ -603,6 +731,9 @@ def main():
         elif stage_num == 2:
             results[2] = run_stage2_simpletes(conjecture_path, results.get(1, {}), output_dir)
         
+        elif stage_num == '2.5':
+            results['2.5'] = run_stage25_curriculum(conjecture_path, results.get(2, {}), output_dir)
+        
         elif stage_num == 3:
             results[3] = run_stage3_ppe(conjecture_path, results.get(2, {}), output_dir)
         
@@ -618,6 +749,11 @@ def main():
             # Standalone: run frozen evaluator evolution on existing proof output
             proof_dir = output_dir / "proof_output"
             results['3.6'] = _run_stage36_evolution(proof_dir, output_dir, generations=args.evo_generations)
+        
+        elif stage_num == '3.6d':
+            # Standalone: run deep refinement (DRS) on existing proof output
+            proof_dir = output_dir / "proof_output"
+            results['3.6d'] = _run_stage36d_deep_refinement(proof_dir, output_dir, rounds=args.evo_generations)
     
     elapsed = time.time() - start_time
     
