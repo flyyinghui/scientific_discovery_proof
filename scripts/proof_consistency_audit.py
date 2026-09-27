@@ -18,9 +18,21 @@ Usage:
       [--expected-axioms 14] [--expected-theorems 3]
 """
 
-import argparse, json, re, sys
+import argparse, json, re, sys, os
 from pathlib import Path
 from datetime import datetime
+
+# ── ScientistTwo P0 三检测（同目录 sibling 模块，可选导入） ──
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+try:
+    from reference_verification import verify_references as _verify_refs
+    from method_code_alignment import align_method_code as _align_mc
+    from axiom_ablation import static_ablation as _static_ablation
+    _HAS_SCIENTISTTWO = True
+except ImportError:
+    _HAS_SCIENTISTTWO = False
 
 
 def is_comment(line: str) -> bool:
@@ -28,11 +40,110 @@ def is_comment(line: str) -> bool:
     return s.startswith("--") or s.startswith("/-") or s.startswith("-/")
 
 
+def strip_block_comments(lean: str) -> str:
+    """嵌套感知块注释剥离（正确处理 /- ... -/ 嵌套，含 /-- doc 注释）。
+
+    非贪婪 re.sub(r'/-.*?-/') 无法处理嵌套块注释（如外层注释内嵌套子注释），
+    会把被注释掉的 axiom 误判为 active。"""
+    out = []
+    depth = 0
+    i = 0
+    n = len(lean)
+    while i < n:
+        if lean[i:i + 2] == '/-':
+            depth += 1
+            i += 2
+        elif lean[i:i + 2] == '-/' and depth > 0:
+            depth -= 1
+            i += 2
+        elif depth == 0:
+            out.append(lean[i])
+            i += 1
+        else:
+            i += 1
+    return ''.join(out)
+
+
+# ======================================================================
+# 缺陷定位（P0-3, Colosseum）：把每个缺陷绑定到具体 section/claim
+# ======================================================================
+
+_SECTION_PAT = re.compile(
+    r'§\s*\d+(?:\.\d+)*'                       # §2.1 / §3
+    r'|\bSection\s+\d+'                        # Section 3
+    r'|\bSTEP\s+\d+'                           # STEP 6
+    r'|\bLemma\s+[A-Za-z_][A-Za-z0-9_]*'       # Lemma L2
+    r'|\bTheorem\s+[A-Za-z_][A-Za-z0-9_]*'     # Theorem T1
+    r'|\[honest-axiom\s+[A-Za-z0-9_]+\]'       # [honest-axiom A1]
+    r'|\bA\d+\b'                               # A1..A28
+    r'|\bV\d+\b'                               # V7 NEW
+)
+
+
+def _extract_sections(lines):
+    """提取 section 标签（供缺陷定位）。返回 [(line_no, label), ...] 按行号升序。"""
+    sections = []
+    for i, l in enumerate(lines, 1):
+        s = l.strip()
+        # 1. Lean section 块
+        m = re.match(r'^section\s+(.+)$', s)
+        if m:
+            sections.append((i, f"section {m.group(1).strip()}"))
+            continue
+        # 2. 注释头（block/doc/line）含定位关键词
+        if s.startswith('/-') or s.startswith('/--') or s.startswith('--'):
+            hm = _SECTION_PAT.search(s)
+            if hm:
+                sections.append((i, hm.group(0).strip()))
+    return sections
+
+
+def _line_to_section(line_no, sections):
+    cur = None
+    for ln, label in sections:
+        if ln <= line_no:
+            cur = label
+        else:
+            break
+    return cur
+
+
+def _localize_findings(findings, raw_lean):
+    """为每个 finding 附加 defect_location（section + line），使审阅可操作。
+
+    P0-3 (Colosseum)：全局验证把缺陷绑定到具体 section/claim，而非仅报类型。"""
+    lines = raw_lean.splitlines()
+    sections = _extract_sections(lines)
+    # 可定位字段（按优先级）
+    NAME_FIELDS = ("axiom", "theorem", "lhs", "unchallenged", "downgraded",
+                   "missing", "dangling", "undeclared", "phantom", "broken",
+                   "redundant_axioms", "essential_axioms")
+    for f in findings:
+        loc = {"section": None, "line": None}
+        key = None
+        for field in NAME_FIELDS:
+            v = f.get(field)
+            if isinstance(v, list) and v:
+                key = v[0]
+                break
+            if isinstance(v, str) and v and re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', v):
+                key = v
+                break
+        if key:
+            for i, l in enumerate(lines, 1):
+                if re.search(rf'\b{re.escape(str(key))}\b', l):
+                    loc["line"] = i
+                    loc["section"] = _line_to_section(i, sections)
+                    break
+        f["defect_location"] = loc
+    return findings
+
+
 def audit(lean_path: str, paper_path: str = None,
           expected_axioms: int = None, expected_theorems: int = None) -> dict:
-    lean = Path(lean_path).read_text(encoding="utf-8", errors="replace")
-    # 去除块注释（/- ... -/，含多行 docstring），避免 docstring 中间行被误判为 active 代码
-    lean = re.sub(r'/-.*?-/', '', lean, flags=re.S)
+    raw_lean = Path(lean_path).read_text(encoding="utf-8", errors="replace")
+    # 去除块注释（/- ... -/，含多行 docstring + 嵌套），避免 docstring 中间行被误判为 active 代码
+    lean = strip_block_comments(raw_lean)
     lines = lean.splitlines()
 
     # ── 提取 active 声明（排除注释行） ────────────────────────
@@ -264,6 +375,49 @@ def audit(lean_path: str, paper_path: str = None,
         if _scope_hits == 0:
             # 无规则范围丢失，记录 INFO 供审计追踪
             pass
+
+    # ── 检测 10: Method-Code Alignment (P0-2, ScientistTwo) ──
+    # [arXiv:2609.19644] CoE 完整性审计第四查：论文方法段 ↔ Lean 代码逐条对齐。
+    # 补 P0-3/P0-4 的反向（Lean→paper），输出 {paper_claim, lean_decl, status} 映射。
+    if _HAS_SCIENTISTTWO and paper_path and Path(paper_path).exists():
+        paper = Path(paper_path).read_text(encoding="utf-8", errors="replace")
+        mc = _align_mc(lean, paper)
+        for b in mc.get("blocks", []):
+            blocks.append(f"[ScientistTwo P0-2] {b}")
+        for w in mc.get("warns", []):
+            warns.append(f"[ScientistTwo P0-2] {w}")
+        for f in mc.get("findings", []):
+            f = dict(f); f["type"] = "scientisttwo_" + f["type"]
+            findings.append(f)
+
+    # ── 检测 11: Reference Verification (P0-1, ScientistTwo) ──
+    # [arXiv:2609.19644] CoE 完整性审计第三查：参考文献零幻觉（0/1814）。
+    if _HAS_SCIENTISTTWO and paper_path and Path(paper_path).exists():
+        paper = Path(paper_path).read_text(encoding="utf-8", errors="replace")
+        rv = _verify_refs(paper)
+        for b in rv.get("blocks", []):
+            blocks.append(f"[ScientistTwo P0-1] {b}")
+        for w in rv.get("warns", []):
+            warns.append(f"[ScientistTwo P0-1] {w}")
+        for f in rv.get("findings", []):
+            f = dict(f); f["type"] = "scientisttwo_" + f["type"]
+            findings.append(f)
+
+    # ── 检测 12: Axiom Ablation static (P0-3, ScientistTwo) ──
+    # [arXiv:2609.19644] Ablation Critic 思路：公理必要性静态消融。
+    # 编译级消融需 Lean 工具链，见 axiom_ablation.py --lean-bin。
+    if _HAS_SCIENTISTTWO:
+        ab = _static_ablation(lean)
+        for b in ab.get("blocks", []):
+            blocks.append(f"[ScientistTwo P0-3] {b}")
+        for w in ab.get("warns", []):
+            warns.append(f"[ScientistTwo P0-3] {w}")
+        for f in ab.get("findings", []):
+            f = dict(f); f["type"] = "scientisttwo_" + f["type"]
+            findings.append(f)
+
+    # ── 缺陷定位 (P0-3, Colosseum)：为每个 finding 附加 section/line ──
+    findings = _localize_findings(findings, raw_lean)
 
     # ── 汇总 ────────────────────────────────────────────────
     gate = "BLOCK" if blocks else ("WARN" if warns else "PASS")

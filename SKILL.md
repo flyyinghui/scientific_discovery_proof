@@ -8,7 +8,7 @@ description: >-
   70% time reduction vs standalone PPE. NEW v2.3: Stage −1 dual-use safety gateway,
   Stage 3.5 Hallucination Clipping (numeric claim ↔ Lean cross-reference + joint
   reliability objective), Stage 2 UCB exploration bonus, Stage 3 three-phase scaffolding.
-version: 2.8.0
+version: 2.12.0
 tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding, rsiagent, curriculum, exploration]
 related_skills:
   - math-agent-framework (MAF stage 0)
@@ -18,9 +18,57 @@ related_skills:
   - ai-scientist-v2 (stage 4)
 ---
 
-# Scientific Discovery & Proof — Integrated Pipeline v2.8
+# Scientific Discovery & Proof — Integrated Pipeline v2.12
 
 Five-stage end-to-end pipeline for physics conjecture discovery → formal verification → publication.
+
+**NEW in v2.12.0** (from Dream-RSI full mechanism, arXiv:2609.14858): **Stage 3.7 证明策略元优化器**。
+补上 v2.7.0 只落地「重放模拟器」表层而缺失的核心层——**优化探索策略本身**（而非单个候选解）。
+新增 `scripts/proof_policy_optimizer.py`，落地 Dream-RSI 的 P0/P2/P3 三项机制，**不动主线五阶段**：
+① **P0 探索策略元优化**：把「证明策略」（5 个变异策略的偏好权重 / 并行度 W / 放弃阈值 / 探索率 ε）
+编码为可执行 `ProofPolicy` 对象，用 archive.jsonl 历史重放反馈迭代改进策略参数本身
+（`ProofPolicy.mutate_params` 参数扰动 + 可选 `_llm_develop_policy` v4-flash 策略开发）。
+② **P2 replay objective 三项**：`V = 质量 − β1·成本 + β2·平均并行度`（`PolicyReplayEvaluator`），
+量化「并行证明 vs 串行证明 vs 放弃」的收益，β1/β2 控制成本/并行权衡。
+③ **P3 单调性保证**：候选策略集始终包含当前策略 π_t，选 max 保证不退化。
+关键设计分离：**「选择」由策略权重决定（×针对性软约束），「结果」由历史真实结果决定**
+（历史成功率 × 平均 gain）——与 Stage 3.6（优化证明代码）正交，是它的元层。
+完整评估见 [`references/dream-rsi-full-assessment.md`](references/dream-rsi-full-assessment.md)。
+
+**NEW in v2.11.0** (from Stellar Colosseum, arXiv:2609.15983): **三个前向阶段增量落地**。
+把 Colosseum 的「探索策略→readiness gate→前向分解→失败路径」移植为三个增量，**不动主线五阶段**：
+① **P1-1 Strategy Explorer**（新 `scripts/strategy_explorer.py`，Stage 0.5 前置）——证明前生成
+3-5 条候选证明路线（各含 mechanism/required_lemmas/expected_bottleneck/falsifiable_test），
+readiness gate 打分选路（Colosseum 三条件：中心约化稳定 / 未决声明可指派 / 无未决桥接改架构）。
+② **P0-2 Pre-Proof Decomposer**（新 `scripts/preproof_decomposer.py`，Stage 2.7 前置）——证明前
+把猜想分解为「编号 section 骨架 + 依赖 DAG」，拓扑排序产出可并行批次，指导 Stage 3 按依赖并行
+生成 Lean 片段 + 失败 section 局部重试。
+③ **P1-2 失败路径**（`stage36_evolution.py` record 新增 `failed_approach` 字段）——被拒变异记录
+「精确失败点 + 变体可行条件」，archive 升级为可复用失败知识目录。
+完整评估见 [`references/colosseum-integration.md`](references/colosseum-integration.md)。
+
+**NEW in v2.10.0** (from Stellar Colosseum, arXiv:2609.15983, 2026-09-15): **Stage 3.5 两个增量落地**。
+把 Colosseum 的定向证伪 + 缺陷定位移植为两个增量，**不动主线五阶段**：
+① **P0-1 Targeted Falsification 缺陷分类学**（`proof_consistency_audit_l2.py` 新增三检测）——映射
+Colosseum 定向证伪的 3 个新缺陷类：`strengthened_hypothesis`（静默强化假设）/
+`proved_vs_target_mismatch`（证明命题≠目标命题）/ `missing_downstream_assumption`（下游缺失假设）。
+三个 LLM 结构检查，结果并入 L2 报告 `targeted_falsification` 字段 + 最终 gate。
+② **P0-3 缺陷定位**（`proof_consistency_audit.py` 新增 `_localize_findings`）——每个 finding 附加
+`defect_location: {section, line}`，把缺陷绑定到具体 section/claim（支持 §N / Section N / STEP N /
+Lemma L / [honest-axiom An] / A 编号注释头定位），使审阅可操作。
+完整评估见 [`references/colosseum-integration.md`](references/colosseum-integration.md)。
+
+**NEW in v2.9.0** (from ScientistTwo, arXiv:2609.19644, 2026-09-17): **Stage 3.5 三个 P0 正确率检测**。
+把 ScientistTwo 的 CoE 完整性审计（0/1814 引用幻觉、方法-代码逐行对齐）和 Ablation Critic
+（组件必要性消融）移植为三个新检测，**直插 Stage 3.5 门控**，不动主线五阶段：
+① **P0-1 Reference Verification**（`scripts/reference_verification.py`）——正文 `[n]` 引用 ↔
+参考文献表逐条核对，悬空引用 → BLOCK，未引用 → WARN。
+② **P0-2 Method-Code Alignment**（`scripts/method_code_alignment.py`）——论文 ↔ Lean 双向对齐，
+phantom（论文声称 Lean 缺失）→ BLOCK，undeclared（Lean 有论文没提）→ WARN，输出映射表。
+③ **P0-3 Axiom Ablation**（`scripts/axiom_ablation.py`）——反事实消融：注释公理→重编译→仍通过=冗余。
+静态模式（WARN 快筛）+ 编译级模式（BLOCK 定论，需 `--lean-bin`）。
+三个检测已并入 `proof_consistency_audit.py`（检测 10/11/12），完整评估见
+[`references/scientisttwo-integration.md`](references/scientisttwo-integration.md)。
 
 **NEW in v2.8.0** (from RSIAgent, arXiv:2609.15364, 2026-09-19): **Stage 2.5 Curriculum Planner +
 Stage 3.5 三条失败模式检测规则 + Stage 3.6d 深挖 + archive 因果三元组**。把 RSIAgent 的
@@ -175,6 +223,18 @@ python pipeline_orchestrator.py \
   --enable-sciexplorer \
   --deepseek-key sk-...
 
+# Stage 0.5 strategy explorer (证明策略探索, 新增 v2.11.0, Colosseum)
+python strategy_explorer.py \
+  --conjecture /path/to/conjecture.json \
+  --paper /path/to/paper.txt \
+  --output /tmp/stage05_strategies.json    # 加 --mock 离线确定性模板
+
+# Stage 2.7 pre-proof decomposer (前向证明分解, 新增 v2.11.0, Colosseum)
+python preproof_decomposer.py \
+  --conjecture /path/to/conjecture.json \
+  --strategy /tmp/stage05_strategies.json \
+  --output /tmp/stage27_decomposition.json  # 加 --mock 离线确定性模板
+
 # Stage 2.5 curriculum planner standalone (课程规划器, 新增 v2.8.0, RSIAgent)
 python curriculum_planner.py \
   --conjecture /path/to/conjecture.json \
@@ -208,6 +268,13 @@ python stage36_evolution.py \
   --generations 3 \
   --output /tmp/stage36/          # 加 --dry-run 离线自测（只评估不调 LLM）
 
+# Stage 3.7 proof policy meta-optimizer (证明策略元优化, 新增 v2.12.0, Dream-RSI P0/P2/P3)
+python proof_policy_optimizer.py \
+  --archive /path/to/stage36/archive.jsonl \
+  --rounds 3 --candidates 8 \
+  --beta1 0.1 --beta2 0.5 \
+  --output /tmp/policy_opt/       # 加 --dry-run 只用参数扰动；--self-test 离线全流程自测
+
 # Stage 3.6d deep refinement (DRS 深挖, 新增 v2.8.0, RSIAgent broad-then-deep)
 python deep_refinement.py \
   --lean /path/to/proof.lean \
@@ -215,15 +282,32 @@ python deep_refinement.py \
   --rounds 3 \
   --output /tmp/deep_refine/      # 加 --dry-run 离线自测（只评估不调 LLM）
 
+# Stage 3.5 P0-1 Reference Verification (参考文献零幻觉, 新增 v2.9.0, ScientistTwo)
+python reference_verification.py \
+  --paper /path/to/paper.txt --output /tmp/ref_check.json
+
+# Stage 3.5 P0-2 Method-Code Alignment (论文↔Lean 双向对齐, 新增 v2.9.0, ScientistTwo)
+python method_code_alignment.py \
+  --lean /path/to/proof.lean --paper /path/to/paper.txt --output /tmp/align.json
+
+# Stage 3.5 P0-3 Axiom Ablation (公理必要性消融, 新增 v2.9.0, ScientistTwo)
+python axiom_ablation.py \
+  --lean /path/to/proof.lean --output /tmp/ablation.json          # 静态（WARN 快筛）
+python axiom_ablation.py \
+  --lean /path/to/proof.lean --lean-bin /root/.elan/bin/lean       # 编译级（BLOCK 定论）
+
+# 三个检测已并入 proof_consistency_audit.py（检测 10/11/12），跑一次全量审计即自动触发
+
+
 # Stage 3.6b — 接入 RSIHub（正式集成，2026-09-04）
 # 用 RSIHub 真实 operator 类 + 冻结评估器 + archive.jsonl 做 Lean 证据链自我进化
-cd ~/AI_for_Science/RSIHub
-.venv/bin/python ./scripts/rsihub_lean_bridge.py \
+cd /mnt/d/AI_for_Science/RSIHub
+.venv/bin/python /mnt/d/HermesAgent/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
   --lean /path/to/proof.lean --generations 3 --output /tmp/lean_evo [--dry-run]
 # 详见 references/rsihub-lean-bridge.md + skill: rsihub
 
 # MAF bridge standalone
-cd ~/AI_for_Science/math-agent-framework
+cd /mnt/d/AI_for_Science/math-agent-framework
 python maf_bridge.py
 ```
 

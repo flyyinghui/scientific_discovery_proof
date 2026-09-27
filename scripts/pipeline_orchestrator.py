@@ -19,7 +19,7 @@ from datetime import datetime
 # ── Configuration ────────────────────────────────────────────
 
 PIPELINE_ROOT = Path(__file__).resolve().parent.parent
-PROJECT_ROOT = Path("~/ai_for_science")
+PROJECT_ROOT = Path("/mnt/d/ai_for_science")
 
 STAGE_SCRIPTS = {
     1: {  # SciExplorer
@@ -630,7 +630,7 @@ Include an abstract. Output as clean markdown."""
 def _load_api_key() -> str:
     """Load DeepSeek API key."""
     for env_path in [
-        '~/.hermes/.env',
+        '/mnt/d/123321/CityHDGanalysis/Spatial_Reasoning_Agent/.env',
         os.path.expanduser('~/.hermes/.env'),
     ]:
         if os.path.exists(env_path):

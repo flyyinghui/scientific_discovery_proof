@@ -100,7 +100,7 @@ def evaluate_lean(lean_text: str, dag_report: dict | None) -> dict:
 
 def _load_api_key() -> str:
     for env_path in [
-        "~/.hermes/.env",
+        "/mnt/d/123321/CityHDGanalysis/Spatial_Reasoning_Agent/.env",
         str(Path.home() / ".hermes/.env"),
     ]:
         p = Path(env_path)
@@ -276,9 +276,20 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
                 "gain": round(candidate["score"] - current["score"], 1),
                 "mutation_strategy": strat_name,
                 "defects_before": current["defects"],
-                "condition": defect_signature(current["defects"]),  # P3: 因果三元组 condition 维度
+                "condition": defect_signature(current["defects"]),
                 "timestamp": datetime.now().isoformat(),
             }
+            # P1-2 (Colosseum)：失败路径记录——精确失败点 + 变体可行条件。
+            # 让 archive 从「被动记录」升级为「可复用失败知识目录」，变异前可注入避免重复踩坑。
+            if not accepted:
+                record["failed_approach"] = {
+                    "route": strat_name,
+                    "failure_point": _defect_summary(candidate["defects"]),
+                    "variant_condition": (
+                        "retry with a different lemma decomposition, strengthened "
+                        "hypothesis, or alternative axiom instantiation"
+                    ),
+                }
             append(record)
             replay.records.append(record)  # 即时更新重放池
 

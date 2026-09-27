@@ -51,7 +51,7 @@ class DeepSeekLLM:
         self.model = model
         self.api_key = os.environ.get("DEEPSEEK_API_KEY")
         if not self.api_key:
-            for p in ["~/.hermes/.env"]:
+            for p in ["/mnt/d/123321/CityHDGanalysis/Spatial_Reasoning_Agent/.env"]:
                 if os.path.exists(p):
                     with open(p) as f:
                         for line in f:
@@ -80,6 +80,12 @@ class MockLLM:
             return '{"verdict": "BLOCK", "confidence": 0.9, "reason": "demo: the axioms assert both equality and inequality for the same function application, enabling ex-falso."}'
         if "spectrum" in prompt.lower() and "non-compact" in prompt.lower():
             return '{"verdict": "BLOCK", "confidence": 0.85, "reason": "demo: discrete spectrum claimed on a non-compact symmetric space without a confining potential is a category error."}'
+        if "silently strengthened" in prompt.lower():
+            return '{"findings": []}'
+        if "MISMATCH between what the PAPER" in prompt:
+            return '{"mismatches": []}'
+        if "LACKS an assumption" in prompt:
+            return '{"findings": []}'
         return '{"verdict": "WARN", "confidence": 0.5, "reason": "demo: insufficient evidence to escalate."}'
 
 
@@ -119,14 +125,67 @@ def extract_l2_candidates(l1_report: dict) -> list:
     return candidates
 
 
+def _strip_block_comments(lean: str) -> str:
+    """嵌套感知块注释剥离（正确处理 /- ... -/ 嵌套，含 /-- doc 注释）。"""
+    out = []
+    depth = 0
+    i = 0
+    n = len(lean)
+    while i < n:
+        if lean[i:i + 2] == '/-':
+            depth += 1
+            i += 2
+        elif lean[i:i + 2] == '-/' and depth > 0:
+            depth -= 1
+            i += 2
+        elif depth == 0:
+            out.append(lean[i])
+            i += 1
+        else:
+            i += 1
+    return ''.join(out)
+
+
+def _active_lines(lean: str) -> list:
+    """剥离注释后返回 active（非注释）行。"""
+    code = _strip_block_comments(lean)
+    return [l for l in code.splitlines()
+            if not (l.strip().startswith("--") or l.strip().startswith("/-")
+                    or l.strip().startswith("-/"))]
+
+
 def _extract_axioms(lean: str) -> str:
     """提取 active axiom 声明（供 L2 判断上下文）。"""
-    code = re.sub(r'/-.*?-/', '', lean, flags=re.S)
-    active = [l for l in code.splitlines()
-              if not (l.strip().startswith("--") or l.strip().startswith("/-")
-                      or l.strip().startswith("-/"))]
-    axioms = [l.strip() for l in active if re.match(r'^\s*axiom\s', l)]
+    axioms = [l.strip() for l in _active_lines(lean) if re.match(r'^\s*axiom\s', l)]
     return "\n".join(axioms[:60]) or "(no axioms)"
+
+
+def _extract_theorems(lean: str) -> str:
+    """提取 active theorem 声明（供定向证伪）。"""
+    thms = [l.strip() for l in _active_lines(lean) if re.match(r'^\s*theorem\s', l)]
+    return "\n".join(thms[:40]) or "(no theorems)"
+
+
+def _extract_lemmas(lean: str) -> str:
+    """提取 active lemma 声明（供定向证伪）。"""
+    lms = [l.strip() for l in _active_lines(lean) if re.match(r'^\s*lemma\s', l)]
+    return "\n".join(lms[:40]) or "(no lemmas)"
+
+
+def _extract_paper_claims(paper: str) -> str:
+    """提取论文的主声明（摘要 + "we prove/establish" 句）。"""
+    if not paper:
+        return "(no paper provided)"
+    lines = paper.splitlines()
+    claims = []
+    for l in lines:
+        if re.search(r'\b(we\s+(prove|establish|show|construct|derive)|we\s+introduce|main\s+(result|theorem|contribution))', l, re.I):
+            claims.append(l.strip()[:200])
+    # 摘要前 500 字兜底
+    if not claims:
+        head = paper[:800]
+        claims.append("(abstract excerpt) " + head.replace("\n", " ")[:600])
+    return "\n".join(claims[:10]) or "(no claims found)"
 
 
 AXIOM_CONTRADICTION_PROMPT = """You are a structural auditor for Lean 4 formal proofs.
@@ -162,6 +221,64 @@ Respond with strict JSON only:
   "reason": "one-sentence justification"}}
 """
 
+# ======================================================================
+# P0-1 (Colosseum) 定向证伪三检测 — 映射 Colosseum 的 3 个新缺陷类
+# ======================================================================
+
+STRENGTHENED_HYPOTHESIS_PROMPT = """You are a targeted falsification auditor (Colosseum-style)
+for Lean 4 formal proofs. Your task: find theorems whose CONCLUSION is stronger than their
+stated HYPOTHESES justify — a "silently strengthened hypothesis" or "silently strengthened
+conclusion". A theorem `theorem T (h : H) : C` is suspect if proving `C` actually requires
+assumptions NOT captured in `H` (so the theorem statement is false in general, or the proof
+must secretly import extra axioms).
+
+Examine these active theorem declarations and proof bodies:
+
+{theorems}
+
+Return strict JSON with a LIST of findings (empty list if none):
+{{"findings": [
+  {{"theorem": "name", "verdict": "BLOCK" | "WARN", "confidence": 0.0-1.0,
+    "missing_hypothesis": "what assumption is silently needed",
+    "reason": "one sentence"}}
+]}}
+"""
+
+PROVED_VS_TARGET_PROMPT = """You are a targeted falsification auditor (Colosseum-style)
+for Lean 4 formal proofs. Your task: detect a MISMATCH between what the PAPER claims to prove
+and what the LEAN file actually proves. The paper's abstract/main claims may state a target
+(e.g. "we prove X") but the Lean main theorem may prove a weaker/different statement Y.
+
+Paper abstract/main claims:
+{paper_claims}
+
+Lean main theorems (top-level `theorem` declarations):
+{lean_theorems}
+
+Return strict JSON with a LIST of mismatches (empty list if none):
+{{"mismatches": [
+  {{"paper_claim": "...", "lean_theorem": "...", "verdict": "BLOCK" | "WARN",
+    "confidence": 0.0-1.0, "reason": "one sentence"}}
+]}}
+"""
+
+MISSING_ASSUMPTION_PROMPT = """You are a targeted falsification auditor (Colosseum-style)
+for Lean 4 formal proofs. Your task: find LEMMAS that are USED BY A DOWNSTREAM THEOREM but
+whose statement LACKS an assumption that the downstream proof silently relies on. This is the
+"missing assumption for a later section" defect: the lemma is too weak to justify the step
+that cites it, so the downstream theorem is unsound.
+
+Examine these lemma declarations and note which theorem uses each:
+
+{lemmas}
+
+Return strict JSON with a LIST of findings (empty list if none):
+{{"findings": [
+  {{"lemma": "name", "used_by": "theorem name", "verdict": "BLOCK" | "WARN",
+    "confidence": 0.0-1.0, "missing_assumption": "...", "reason": "one sentence"}}
+]}}
+"""
+
 
 def judge_candidate(llm, lean: str, candidate: dict) -> dict:
     """用 LLM 判断单个 L2 候选是否升级为 BLOCK。"""
@@ -187,6 +304,48 @@ def judge_candidate(llm, lean: str, candidate: dict) -> dict:
                 "reason": f"LLM returned unparseable: {raw[:120]}"}
 
 
+def _parse_json(raw: str) -> dict:
+    """容错解析 LLM 返回的 JSON（清围栏，取首 { 到尾 }）。"""
+    raw = raw.strip().replace("```json", "").replace("```", "")
+    m = re.search(r'\{.*\}', raw, re.S)
+    try:
+        return json.loads(m.group(0))
+    except Exception:
+        return {}
+
+
+def run_targeted_falsification(lean: str, paper: str, llm) -> list:
+    """P0-1 (Colosseum)：定向证伪三检测。
+
+    映射 Colosseum 定向证伪的 3 个新缺陷类（②静默强化假设 / ⑤证明命题≠目标 / ⑥缺失下游假设）。
+    返回 [(check_type, verdict, detail_dict), ...]。"""
+    results = []
+
+    # ① strengthened hypothesis（静默强化假设）
+    thms = _extract_theorems(lean)
+    if thms != "(no theorems)":
+        raw = llm.generate(STRENGTHENED_HYPOTHESIS_PROMPT.format(theorems=thms))
+        for item in _parse_json(raw).get("findings", []):
+            results.append(("strengthened_hypothesis", item.get("verdict", "WARN"), item))
+
+    # ② proved vs target（证明命题 ≠ 目标命题，需 paper）
+    if paper:
+        claims = _extract_paper_claims(paper)
+        raw = llm.generate(PROVED_VS_TARGET_PROMPT.format(
+            paper_claims=claims, lean_theorems=thms))
+        for item in _parse_json(raw).get("mismatches", []):
+            results.append(("proved_vs_target_mismatch", item.get("verdict", "WARN"), item))
+
+    # ③ missing downstream assumption（下游缺失假设）
+    lms = _extract_lemmas(lean)
+    if lms != "(no lemmas)":
+        raw = llm.generate(MISSING_ASSUMPTION_PROMPT.format(lemmas=lms))
+        for item in _parse_json(raw).get("findings", []):
+            results.append(("missing_downstream_assumption", item.get("verdict", "WARN"), item))
+
+    return results
+
+
 def run_l2(lean_path: str, paper_path: str = None,
            expected_axioms: int = None, expected_theorems: int = None,
            llm=None) -> dict:
@@ -207,13 +366,26 @@ def run_l2(lean_path: str, paper_path: str = None,
         if j.get("verdict") == "BLOCK":
             escalated.append(c.get("type"))
 
+    # ── P0-1 (Colosseum) 定向证伪三检测 ──
+    paper = None
+    if paper_path and Path(paper_path).exists():
+        paper = Path(paper_path).read_text(encoding="utf-8", errors="replace")
+    tf_results = run_targeted_falsification(lean, paper, llm)
+    tf_findings = [{"check": t, "verdict": v, **d}
+                   for t, v, d in tf_results]
+    tf_blocks = [f"[{t}] {d.get('reason', '')[:120]}" for t, v, d in tf_results
+                 if v == "BLOCK"]
+    tf_warns = [f"[{t}] {d.get('reason', '')[:120]}" for t, v, d in tf_results
+                if v != "BLOCK"]
+
     # 合并 L1 gate 与 L2 升级
     l1_blocks = [b for b in l1.get("blocks", [])]
     l1_warns = [w for w in l1.get("warns", [])]
-    final_blocks = list(l1_blocks)
+    final_blocks = list(l1_blocks) + tf_blocks
     final_warns = [w for w in l1_warns
                    if not any(c.get("type") in escalated
                               and c.get("msg") == w for c in candidates)]
+    final_warns = final_warns + tf_warns
 
     report = {
         "l2_time": None,
@@ -227,6 +399,7 @@ def run_l2(lean_path: str, paper_path: str = None,
         "l2_candidates_found": len(candidates),
         "l2_judgments": l2_judgments,
         "l2_escalated": escalated,
+        "targeted_falsification": tf_findings,
         "final_gate": "BLOCK" if (final_blocks or escalated) else
                       ("WARN" if final_warns else "PASS"),
         "final_blocks": final_blocks,
@@ -267,6 +440,12 @@ def main():
         print(f"    [{j.get('candidate_type')}] -> {j.get('verdict')} "
               f"(conf={j.get('confidence')}) {j.get('reason', '')[:80]}")
     print(f"  L2 升级为 BLOCK: {report['l2_escalated'] or '无'}")
+    tf = report.get("targeted_falsification", [])
+    if tf:
+        print(f"  定向证伪 (P0-1 Colosseum): {len(tf)} 项")
+        for f in tf:
+            mark = "🔴" if f.get("verdict") == "BLOCK" else "🟡"
+            print(f"    {mark} [{f.get('check')}] {f.get('reason', '')[:90]}")
     print(f"\n  最终 GATE: {report['final_gate']}")
     print(f"  Report: {args.output}")
     return 0 if report["final_gate"] != "BLOCK" else 1
