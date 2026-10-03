@@ -3,7 +3,7 @@
 **来源**：RSIAgent: Autonomous Exploration for Recursive Self-improvement in New Environments
 (arXiv:2609.15364, Aether AI, 2026-09-14)
 
-**集成日期**：2026-09-19 | **论文**：`/mnt/d/ai_for_science/papers/RSIAgent_2609.15364.pdf`
+**集成日期**：2026-09-19 | **论文**：`~/projects/papers/RSIAgent_2609.15364.pdf`
 
 ## 论文核心
 

@@ -100,7 +100,7 @@ def evaluate_lean(lean_text: str, dag_report: dict | None) -> dict:
 
 def _load_api_key() -> str:
     for env_path in [
-        "/mnt/d/123321/CityHDGanalysis/Spatial_Reasoning_Agent/.env",
+        "~/.hermes/.env",
         str(Path.home() / ".hermes/.env"),
     ]:
         p = Path(env_path)

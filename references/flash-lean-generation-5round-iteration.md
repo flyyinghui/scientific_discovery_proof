@@ -31,7 +31,7 @@
 ## 编译环境
 
 ```bash
-cd /mnt/c/Users/Think/Desktop/AI论文/cgice   # 借用 CGICE 的 mathlib（12GB olean 已编译）
+cd ~/Desktop/papers/cgice   # 借用 CGICE 的 mathlib（12GB olean 已编译）
 export PATH=/root/.elan/bin:$PATH
 export HOME=/root   # 关键：后台进程 HOME 未设置会报 `/.local/bin/env: No such file or directory`
 lake env lean /path/to/proof.lean

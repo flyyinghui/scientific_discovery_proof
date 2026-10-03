@@ -8,8 +8,8 @@ description: >-
   70% time reduction vs standalone PPE. NEW v2.3: Stage −1 dual-use safety gateway,
   Stage 3.5 Hallucination Clipping (numeric claim ↔ Lean cross-reference + joint
   reliability objective), Stage 2 UCB exploration bonus, Stage 3 three-phase scaffolding.
-version: 2.12.0
-tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding, rsiagent, curriculum, exploration]
+version: 2.13.0
+tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding, rsiagent, curriculum, exploration, planted-truth, constant-certification, bootloops]
 related_skills:
   - math-agent-framework (MAF stage 0)
   - SciExplorer (stage 1)
@@ -18,9 +18,21 @@ related_skills:
   - ai-scientist-v2 (stage 4)
 ---
 
-# Scientific Discovery & Proof — Integrated Pipeline v2.12
+# Scientific Discovery & Proof — Integrated Pipeline v2.13
 
 Five-stage end-to-end pipeline for physics conjecture discovery → formal verification → publication.
+
+**NEW in v2.13.0** (from BootLoops 1.0, M. D. Schwartz / Anthropic, 2026-10-01): **Stage 1.5 数值层健全性双门**。
+把 BootLoops 的两个核心协议落成两个脚本，插在数值验证 (Stage 1) 与形式化证明 (Stage 3) 之间，
+**不动主线五阶段**，补上管线数值层最薄弱的两个缺口（假猜想/数值错/循环认证）：
+① **Stage 1.5a 植物真值门**（新 `scripts/planted_truth_gate.py`，BootLoops `planted-truth`）——
+形式化前先验证数值引擎能 (a) 恢复一个已知植入答案（正对照）且 (b) 抓住一个故意污染的错误输入
+（负对照）。内置 SL(6,C) 四论文框架的 5 正 + 1 负对照（含 v2.6.0 的 g_TC²=8π²/35 历史 bug 作为
+canonical 负对照）。任一对照失败 → BLOCK（在 Stage 3 前终止）。
+② **Stage 1.5b 闭环常数认证**（新 `scripts/constant_certify.py`，BootLoops `constant-recognition`）——
+用 PSLQ 整数关系把高精度数值认证为「声明常数环」上的闭环形式，纪律是「先声明环+高度+精度预算，
+找不到就拒绝发明」。内置 SL(6,C) 的 g_*²=12π²/35、g_inst²=24π²/35、λ_KLS=35/3、|ρ_res|²=35 四个认证目标。
+完整评估见 [`references/bootloops-integration.md`](references/bootloops-integration.md)。
 
 **NEW in v2.12.0** (from Dream-RSI full mechanism, arXiv:2609.14858): **Stage 3.7 证明策略元优化器**。
 补上 v2.7.0 只落地「重放模拟器」表层而缺失的核心层——**优化探索策略本身**（而非单个候选解）。
@@ -299,15 +311,26 @@ python axiom_ablation.py \
 # 三个检测已并入 proof_consistency_audit.py（检测 10/11/12），跑一次全量审计即自动触发
 
 
+# Stage 1.5a planted-truth gate (植物真值门, 新增 v2.13.0, BootLoops planted-truth)
+# 形式化前验证数值引擎能恢复已知植入答案(正对照) + 抓住故意污染输入(负对照)。
+python planted_truth_gate.py --self-test                        # 内置 SL6C 5正+1负对照
+python planted_truth_gate.py --controls /path/controls.json --output /tmp/stage15.json
+
+# Stage 1.5b constant certification (闭环常数认证, 新增 v2.13.0, BootLoops constant-recognition)
+# PSLQ 认证「声明环上的闭环形式」，先声明环+高度+精度预算，找不到就拒绝发明。
+python constant_certify.py --self-test                           # 内置 SL6C 四个闭环常数
+python constant_certify.py --target NAME --value X --ring "pi**2" "1" --height 1e8 --digits 50
+
+
 # Stage 3.6b — 接入 RSIHub（正式集成，2026-09-04）
 # 用 RSIHub 真实 operator 类 + 冻结评估器 + archive.jsonl 做 Lean 证据链自我进化
-cd /mnt/d/AI_for_Science/RSIHub
-.venv/bin/python /mnt/d/HermesAgent/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
+cd ~/projects/RSIHub
+.venv/bin/python ./scripts/rsihub_lean_bridge.py \
   --lean /path/to/proof.lean --generations 3 --output /tmp/lean_evo [--dry-run]
 # 详见 references/rsihub-lean-bridge.md + skill: rsihub
 
 # MAF bridge standalone
-cd /mnt/d/AI_for_Science/math-agent-framework
+cd ~/projects/math-agent-framework
 python maf_bridge.py
 ```
 

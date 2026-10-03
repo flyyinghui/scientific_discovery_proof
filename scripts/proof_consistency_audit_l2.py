@@ -51,7 +51,7 @@ class DeepSeekLLM:
         self.model = model
         self.api_key = os.environ.get("DEEPSEEK_API_KEY")
         if not self.api_key:
-            for p in ["/mnt/d/123321/CityHDGanalysis/Spatial_Reasoning_Agent/.env"]:
+            for p in ["~/.hermes/.env"]:
                 if os.path.exists(p):
                     with open(p) as f:
                         for line in f:

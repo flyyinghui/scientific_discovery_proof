@@ -60,7 +60,7 @@ TASK_TEMPLATES = {
 
 def _load_api_key() -> str:
     for env_path in [
-        '/mnt/d/123321/CityHDGanalysis/Spatial_Reasoning_Agent/.env',
+        '~/.hermes/.env',
         os.path.expanduser('~/.hermes/.env'),
     ]:
         if os.path.exists(env_path):
