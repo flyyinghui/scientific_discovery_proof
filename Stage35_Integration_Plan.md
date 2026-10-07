@@ -98,7 +98,7 @@ Stage 4   AI-Scientist V2（论文生成）
 ### 4.1 独立使用
 
 ```bash
-cd ./scripts
+cd ~/skills/scientific-discovery-proof/scripts
 python proof_consistency_audit.py \
   --lean /path/to/proof.lean \
   --paper /path/to/paper.txt \      # 可选，用于检测定理虚假声称

@@ -172,19 +172,40 @@ def _extract_lemmas(lean: str) -> str:
     return "\n".join(lms[:40]) or "(no lemmas)"
 
 
+def _neutralize(phrase: str) -> str:
+    """把确定性修辞动词降级为中性声称（P4 Verifier 隔离）。
+
+    RSIAgent Verifier 隔离核心：审计时屏蔽论文的自我描述（"we rigorously prove"），
+    改为中性声称（"the paper claims to prove"），让 LLM 以怀疑态度独立判断，
+    而非被论文的修辞性确定性带偏。
+    """
+    pl = phrase.lower()
+    for v in ("prove", "establish", "show", "construct", "derive", "introduce"):
+        if v in pl:
+            return f"the paper claims to {v}"
+    for v in ("result", "theorem", "contribution"):
+        if v in pl:
+            return f"the paper's claimed main {v}"
+    return "the paper claims"
+
+
 def _extract_paper_claims(paper: str) -> str:
-    """提取论文的主声明（摘要 + "we prove/establish" 句）。"""
+    """提取论文的主声明，并降级修辞（P4 屏蔽自我描述）。"""
     if not paper:
         return "(no paper provided)"
     lines = paper.splitlines()
+    _claim_verbs = re.compile(
+        r'\bwe\s+(?:\w+\s+){0,2}(?:prove|establish|show|construct|derive|introduce)\b'
+        r'|\bmain\s+(?:result|theorem|contribution)\b', re.I)
     claims = []
     for l in lines:
-        if re.search(r'\b(we\s+(prove|establish|show|construct|derive)|we\s+introduce|main\s+(result|theorem|contribution))', l, re.I):
-            claims.append(l.strip()[:200])
+        if _claim_verbs.search(l):
+            l2 = _claim_verbs.sub(lambda m: _neutralize(m.group(0)), l)
+            claims.append(f"[PAPER CLAIM — UNVERIFIED] {l2.strip()[:200]}")
     # 摘要前 500 字兜底
     if not claims:
         head = paper[:800]
-        claims.append("(abstract excerpt) " + head.replace("\n", " ")[:600])
+        claims.append("[PAPER CLAIM — UNVERIFIED] (abstract excerpt) " + head.replace("\n", " ")[:600])
     return "\n".join(claims[:10]) or "(no claims found)"
 
 

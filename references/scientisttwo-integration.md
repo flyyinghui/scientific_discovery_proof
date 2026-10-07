@@ -74,4 +74,4 @@ Curriculum Planner 承载），非真的跑 benchmark。
 - **P1（2 个发现概率增量）**：Novelty Checker（低改，扩展 curriculum）+ Limitation Extractor（中改，Stage 0.5 前置）。
 - **P2/P3（不接）**：与已集成 RSIHub/Dream-RSI/RSIAgent/Co-Scientist 重复的模块。
 
-完整评估见会话记录；论文全文 PDF + text 存 `~/data/papers\2609.19644_ScientistTwo.{pdf,txt}`。
+完整评估见会话记录；论文全文 PDF + text 存 `H:\中国数据\papers\2609.19644_ScientistTwo.{pdf,txt}`。

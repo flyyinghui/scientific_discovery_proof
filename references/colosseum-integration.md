@@ -64,4 +64,4 @@ Colosseum 是**数学/TCS 形式化证明** harness（与 scientific-discovery-p
 - **P1（2 个发现概率增量）**：Strategy Exploration + Readiness Gate（Stage 0.5 前置）+ Knowledge Directory 失败路径（扩 archive）。
 - **P2（不接）**：Tree overlapping aggregation / Retaining attempts（与 MCTS/ABC + Dream-RSI 重叠）。
 
-论文全文 text 存 `~/data/papers\2609.15983_StellarColosseum_text.txt`。
+论文全文 text 存 `H:\中国数据\papers\2609.15983_StellarColosseum_text.txt`。

@@ -1,0 +1,332 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""物理内容审计门控 — 检测「定义重言式」（definitional tautology trap）
+
+把「0 sorry / 0 axiom 编译通过」与「物理内容非平凡」区分开。
+
+V64 教训（2026-09-26 终审）：把物理对象直接定义为 S ≡ 谱底·‖φ‖²+V_top，
+则 bound 变成重言式（35x+b ≥ 35x+b），是替换非推导——4/5 代理一致 P0。
+检测信号：unfold 后定理体只剩 `rw [定义] + linarith`。
+
+三类检测：
+  1. 字面恒等重言式（conclusion 形如 X = X / X ≥ X / X ≤ X）      → BLOCK
+  2. 定义重言式（rw/unfold 展开 conclusion 里的定义 + 无实质 tactic） → BLOCK
+  3. 浅层证明（证明体无任何实质 tactic，如 calc/have/ring/exact）      → WARN
+
+实质 tactic = calc / have / ring / ring_nf / field_simp / by_contra /
+              induction / cases / exact <非rfl> / linarith [假设] / apply / refine
+
+用法：
+  python physical_content_audit.py --lean proof.lean --output /tmp/content_audit.json
+  python physical_content_audit.py --self-test
+
+stdlib-only，可作 Stage 3.5 的独立门控（在 paper generation 前跑）。
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+# ── 注释剥离 ─────────────────────────────────────────────────────
+
+def _strip_block_comments(lean: str) -> str:
+    """嵌套感知块注释剥离（正确处理 /- ... -/ 嵌套，含 /-- doc 注释）。"""
+    out = []
+    depth = 0
+    i = 0
+    n = len(lean)
+    while i < n:
+        if lean[i:i + 2] == '/-':
+            depth += 1
+            i += 2
+        elif lean[i:i + 2] == '-/' and depth > 0:
+            depth -= 1
+            i += 2
+        elif depth == 0:
+            out.append(lean[i])
+            i += 1
+        else:
+            i += 1
+    return ''.join(out)
+
+
+def _strip_line_comments(code: str) -> str:
+    """剥离单行注释（-- ...），含整行注释。任何 -- 之后的内容都是注释。"""
+    return '\n'.join(
+        l.split('--', 1)[0] if '--' in l else l
+        for l in code.splitlines()
+    )
+
+
+# ── 顶层声明识别 ────────────────────────────────────────────────
+
+TOP_LEVEL_RE = re.compile(
+    r'^(theorem|lemma|def|axiom|example|namespace|end|section|structure|class|'
+    r'instance|inductive|abbrev|noncomputable|variable|open|import|#)\b'
+)
+
+
+def _extract_blocks(lean: str) -> list[dict]:
+    """提取每个 theorem/lemma 块为 {kind, name, statement, body}。
+
+    顶层声明 = 行首（无前导空格）以 TOP_LEVEL_RE 关键词开头。
+    statement = 从声明到第一个 `:=` 之前（含 conclusion）；body = `:=` 之后。
+    """
+    code = _strip_line_comments(_strip_block_comments(lean))
+    lines = code.splitlines()
+    blocks = []
+    current = None
+    for line in lines:
+        is_top = bool(line.strip()) and not line[0].isspace() and TOP_LEVEL_RE.match(line)
+        if is_top:
+            if current and current["kind"] in ("theorem", "lemma"):
+                blocks.append(current)
+            m = re.match(r'^(theorem|lemma)\s+', line)
+            current = {"kind": m.group(1), "lines": [line]} if m else None
+        elif current is not None:
+            current["lines"].append(line)
+    if current and current["kind"] in ("theorem", "lemma"):
+        blocks.append(current)
+
+    result = []
+    for b in blocks:
+        full = "\n".join(b["lines"])
+        idx = full.find(":=")
+        statement = full[:idx] if idx != -1 else full
+        body = full[idx + 2:] if idx != -1 else ""
+        # 提取 name
+        m = re.search(r'^(?:theorem|lemma)\s+([\w.]+)', statement)
+        name = m.group(1) if m else "?"
+        result.append({"kind": b["kind"], "name": name, "statement": statement, "body": body})
+    return result
+
+
+def _extract_conclusion(statement: str) -> str:
+    """提取 conclusion：最后一个顶层 `:`（排除 `:=`）之后的内容。"""
+    depth = 0
+    last_colon = -1
+    for i, ch in enumerate(statement):
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == ":" and depth == 0:
+            if i + 1 < len(statement) and statement[i + 1] == "=":
+                continue
+            last_colon = i
+    if last_colon == -1:
+        return ""
+    return statement[last_colon + 1:].strip()
+
+
+# ── 实质 tactic 信号 ─────────────────────────────────────────────
+
+SUBSTANTIVE_PATTERNS = [
+    r'\bcalc\b',                          # 多步推导链
+    r'\bhave\b',                          # 中间引理
+    r'\bring_nf\b',                       # 多项式实质代数
+    r'\bring\b',                          # 多项式实质代数
+    r'\bfield_simp\b',                    # 域的实质代数
+    r'\bby_contra\b',                     # 反证
+    r'\binduction\b',                     # 归纳
+    r'\bcases\b',                         # 分情况
+    r'\bconstructor\b',                   # 构造
+    r'\bapply\b',                         # 应用
+    r'\brefine\b',                        # 精化
+    r'\btrans\b',                         # 传递性推导
+    r'\bexact\s+(?!rfl\b|trivial\b)',     # exact 引用非平凡项
+    r'\b(?:n?linarith|omega)\s*\[',       # linarith/omega 带假设
+    r'\bchange\b',                        # 目标变换
+]
+
+
+def _has_substantive(body: str) -> bool:
+    """证明体是否含任何实质 tactic。"""
+    return any(re.search(p, body) for p in SUBSTANTIVE_PATTERNS)
+
+
+# ── 重言式检测 ───────────────────────────────────────────────────
+
+_REL_OPS = "=≥≤↔"
+
+
+def _is_identity_tautology(conclusion: str) -> bool:
+    """检测 conclusion 是否字面恒等（X = X / X ≥ X / X ≤ X / X ↔ X，左右完全相同）。"""
+    c = conclusion.strip()
+    depth = 0
+    i = 0
+    while i < len(c):
+        ch = c[i]
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif depth == 0 and ch in _REL_OPS:
+            left = c[:i].strip()
+            right = c[i + 1:].strip()
+            if left and left == right:
+                return True
+        i += 1
+    return False
+
+
+def _detect_definitional_tautology(conclusion: str, body: str) -> bool:
+    """检测定义重言式：rw/unfold 展开 conclusion 里出现的定义 + 无实质 tactic。
+
+    V64 教训：`theorem bound : S ≥ 谱底·‖φ‖²+V_top := by rw [S]; linarith`，
+    rw [S] 把 S 展开成 `谱底·‖φ‖²+V_top`，linarith 证的是恒等式（替换非推导）。
+    """
+    if not conclusion or not body.strip():
+        return False
+    expanded = set()
+    for m in re.finditer(r'\b(?:rw|simp|rwa)\s*\[([^\]]*)\]', body):
+        for name in m.group(1).split(','):
+            nm = name.strip()
+            if nm:
+                expanded.add(nm)
+    for m in re.finditer(r'\bunfold\s+([\w.]+)', body):
+        expanded.add(m.group(1))
+    # 展开的定义名出现在 conclusion 里
+    defs_in_conclusion = [d for d in expanded if d and d in conclusion]
+    if not defs_in_conclusion:
+        return False
+    # 且证明体无实质 tactic
+    return not _has_substantive(body)
+
+
+# ── 主审计 ───────────────────────────────────────────────────────
+
+def audit(lean: str) -> dict:
+    """审计 Lean 文件，返回 {findings, stats, gate}。"""
+    blocks = _extract_blocks(lean)
+    findings = []
+    blocks_audited = 0
+    for b in blocks:
+        conclusion = _extract_conclusion(b["statement"])
+        body = b["body"]
+        blocks_audited += 1
+        substantive = _has_substantive(body)
+
+        if _is_identity_tautology(conclusion):
+            findings.append({
+                "type": "identity_tautology",
+                "severity": "BLOCK",
+                "theorem": b["name"],
+                "reason": f"结论字面恒等：{conclusion[:80]}",
+            })
+        elif _detect_definitional_tautology(conclusion, body):
+            findings.append({
+                "type": "definitional_tautology",
+                "severity": "BLOCK",
+                "theorem": b["name"],
+                "reason": (f"rw/unfold 展开 conclusion 里的定义后仅剩平凡重排，"
+                           f"无实质 tactic（calc/have/ring/exact 均缺失）：{conclusion[:60]}"),
+            })
+        elif body.strip() and not substantive:
+            findings.append({
+                "type": "shallow_proof",
+                "severity": "WARN",
+                "theorem": b["name"],
+                "reason": f"证明体无任何实质 tactic（可能是平凡引理，需人工判断）：{conclusion[:60]}",
+            })
+
+    blocks = [b for b in findings if b["severity"] == "BLOCK"]
+    warns = [b for b in findings if b["severity"] == "WARN"]
+    gate = "BLOCK" if blocks else ("WARN" if warns else "PASS")
+    stats = {
+        "theorems_audited": blocks_audited,
+        "blocks": len(blocks),
+        "warns": len(warns),
+        "identity_tautologies": sum(1 for f in findings if f["type"] == "identity_tautology"),
+        "definitional_tautologies": sum(1 for f in findings if f["type"] == "definitional_tautology"),
+        "shallow_proofs": sum(1 for f in findings if f["type"] == "shallow_proof"),
+    }
+    return {"findings": findings, "stats": stats, "gate": gate}
+
+
+# ── 自测 ─────────────────────────────────────────────────────────
+
+SELF_TEST_LEAN = """import Mathlib
+
+-- ① 字面恒等重言式（BLOCK）
+def S := 35 * 1 + 1
+
+theorem identity_taut : 35 * 1 + 1 = 35 * 1 + 1 := by
+  rfl
+
+-- ② 定义重言式（BLOCK）：rw [S] 展开结论里的定义，linarith 证恒等式
+theorem def_taut : S ≥ 35 * 1 + 1 := by
+  rw [S]
+  linarith
+
+-- ③ 浅层证明（WARN）：只有 norm_num，无实质 tactic
+theorem shallow : 2 + 2 = 4 := by
+  norm_num
+
+-- ④ 实质证明（PASS）：calc 链 + ring，有实质数学内容
+theorem substantive : (a b : ℝ) → (a + b)^2 = a^2 + 2*a*b + b^2 := by
+  intro a b
+  calc
+    (a + b)^2 = a^2 + 2*a*b + b^2 := by ring
+"""
+
+
+def _self_test() -> int:
+    report = audit(SELF_TEST_LEAN)
+    stats = report["stats"]
+    print(f"审计: {stats['theorems_audited']} 个定理")
+    print(f"  identity_tautologies={stats['identity_tautologies']}（期望 1）")
+    print(f"  definitional_tautologies={stats['definitional_tautologies']}（期望 1）")
+    print(f"  shallow_proofs={stats['shallow_proofs']}（期望 1）")
+    print(f"  gate={report['gate']}（期望 BLOCK）")
+    for f in report["findings"]:
+        print(f"    [{f['severity']}] {f['theorem']}: {f['reason'][:70]}")
+
+    assert stats["identity_tautologies"] == 1, "字面恒等检测失败"
+    assert stats["definitional_tautologies"] == 1, "定义重言式检测失败"
+    assert stats["shallow_proofs"] == 1, "浅层证明检测失败"
+    assert report["gate"] == "BLOCK", "门控应为 BLOCK"
+    # 实质定理不应被误报
+    assert not any(f["theorem"] == "substantive" for f in report["findings"]), "实质定理被误报"
+    print("\n自测通过 ✓")
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="物理内容审计门控（定义重言式检测）")
+    ap.add_argument("--lean", help="Lean 4 证明文件")
+    ap.add_argument("--output", default="/tmp/physical_content_audit.json")
+    ap.add_argument("--self-test", action="store_true")
+    args = ap.parse_args()
+
+    if args.self_test:
+        return _self_test()
+
+    if not args.lean:
+        print("用法: python physical_content_audit.py --lean proof.lean [--output ...] [--self-test]")
+        return 2
+
+    lean = Path(args.lean).read_text(encoding="utf-8", errors="replace")
+    report = audit(lean)
+    Path(args.output).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    print("=" * 64)
+    print("物理内容审计门控（定义重言式检测）")
+    print("=" * 64)
+    print(f"  审计定理数: {report['stats']['theorems_audited']}")
+    print(f"  定义重言式 (BLOCK): {report['stats']['definitional_tautologies']}")
+    print(f"  字面恒等 (BLOCK): {report['stats']['identity_tautologies']}")
+    print(f"  浅层证明 (WARN): {report['stats']['shallow_proofs']}")
+    for f in report["findings"]:
+        mark = "🔴" if f["severity"] == "BLOCK" else "🟡"
+        print(f"    {mark} [{f['type']}] {f['theorem']}: {f['reason'][:80]}")
+    print(f"\n  最终 GATE: {report['gate']}")
+    print(f"  Report: {args.output}")
+    return 0 if report["gate"] != "BLOCK" else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

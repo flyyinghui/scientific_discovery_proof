@@ -132,7 +132,8 @@ class ReplaySimulator:
                 continue
             s = stats[strat]
             s["attempts"] += 1
-            if r.get("accepted"):
+            # P0-③ learn_on_pass：不退化（accepted 或 learn_on_pass）都计为成功经验
+            if r.get("accepted") or r.get("learn_on_pass"):
                 s["accepted"] += 1
             gain = r.get("gain", 0.0)  # score 提升（accepted 时 parent→child 差值）
             if isinstance(gain, (int, float)):
@@ -251,7 +252,8 @@ class ReplaySimulator:
             cond = defect_signature(before)
             key = (strat, cond)
             rules[key]["attempts"] += 1
-            if r.get("accepted"):
+            # P0-③ learn_on_pass：不退化也计为成功（causal rules 学习「不退化」先例）
+            if r.get("accepted") or r.get("learn_on_pass"):
                 rules[key]["accepted"] += 1
             gain = r.get("gain", 0.0)
             if isinstance(gain, (int, float)):

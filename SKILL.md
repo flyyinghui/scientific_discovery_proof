@@ -8,7 +8,7 @@ description: >-
   70% time reduction vs standalone PPE. NEW v2.3: Stage −1 dual-use safety gateway,
   Stage 3.5 Hallucination Clipping (numeric claim ↔ Lean cross-reference + joint
   reliability objective), Stage 2 UCB exploration bonus, Stage 3 three-phase scaffolding.
-version: 2.13.0
+version: 2.16.0
 tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding, rsiagent, curriculum, exploration, planted-truth, constant-certification, bootloops]
 related_skills:
   - math-agent-framework (MAF stage 0)
@@ -18,9 +18,34 @@ related_skills:
   - ai-scientist-v2 (stage 4)
 ---
 
-# Scientific Discovery & Proof — Integrated Pipeline v2.13
+# Scientific Discovery & Proof — Integrated Pipeline v2.15
 
 Five-stage end-to-end pipeline for physics conjecture discovery → formal verification → publication.
+
+**NEW in v2.15.0** (from V64 定义重言式教训，2026-10-05): **物理内容审计门控**。
+新增 `scripts/physical_content_audit.py`（stdlib-only），把「0 sorry / 0 axiom 编译通过」与「物理内容非平凡」区分开。
+V64 教训：把物理对象直接定义为 S ≡ 谱底·‖φ‖²+V_top，则 bound 变成重言式（35x+b ≥ 35x+b），是替换非推导——
+4/5 代理一致 P0。三类检测：① **字面恒等重言式**（conclusion 形如 X=X / X≥X / X≤X）→ BLOCK；② **定义重言式**
+（rw/unfold 展开 conclusion 里的定义 + 无实质 tactic）→ BLOCK；③ **浅层证明**（证明体无 calc/have/ring/exact
+等实质 tactic）→ WARN。实质 tactic = calc/have/ring/ring_nf/field_simp/by_contra/induction/cases/exact<非rfl>/
+linarith[假设]/apply/refine。用法见 Quick Start。**已接进 `pipeline_orchestrator.py` 的 Stage 3.5b 主流程**
+（`_run_stage35b_physical_content_audit`，在自洽性审计之后、DAG 审计之前自动运行），且 Stage 3.5/3.5b/3.5c
+任一 BLOCK 时**阻止 Stage 4 论文生成**。
+
+**NEW in v2.14.0** (from RSIAgent 复审，arXiv:2609.15364 代码深读，2026-10-05): **Stage 3.6 进化循环五项增量落地**。
+把 RSIAgent 剩余未落地的「元层」增量落地到 Stage 3.6 进化循环 + L2 审计，**不动主线五阶段**：
+① **P0-① 三大改进极限元诊断**（`stage36_evolution.py` 新增 `_diagnose_stall`）——连续停滞时判断根因
+（Insufficiently Targeted Exploration / Incomplete Verification / Unreliable Memory Consolidation），注入下轮诊断。
+② **P0-② 密封评估器 + 防 reward hack**（新增 `_detect_reward_hack`）——检测缺陷等价替换
+（sorry→admit / 空壳→sorry / 未完成总量增加），等价替换即拒绝（即使分数虚高）。
+③ **P0-③ learn_on_pass**（record 新增 `learn_on_pass` 字段 + `replay_strategies.py` 成功判断扩展）——
+分数不退化（≥）也记录为「成功经验」，供 replay 学习「不退化」先例。
+④ **P5 证明模式模板库**（新 `scripts/proof_templates.json` + `scripts/proof_template_library.py`）——
+把已验证证明模式（条件定理重构/诚实公理化/黄金门控/0 公理重构等 8 个）冻结为 few-shot 模板，
+新证明按缺陷类型检索注入 mutate prompt（记忆冻结复用）。
+⑤ **P4 屏蔽自我描述**（`proof_consistency_audit_l2.py` 的 `_extract_paper_claims` 降级修辞）——
+把论文「we prove/establish」降级为「the paper claims」，标注 [UNVERIFIED]，防 LLM 被修辞带偏。
+完整记录见 [`references/rsiagent-integration.md`](references/rsiagent-integration.md) 复审补充节。
 
 **NEW in v2.13.0** (from BootLoops 1.0, M. D. Schwartz / Anthropic, 2026-10-01): **Stage 1.5 数值层健全性双门**。
 把 BootLoops 的两个核心协议落成两个脚本，插在数值验证 (Stage 1) 与形式化证明 (Stage 3) 之间，
@@ -311,6 +336,14 @@ python axiom_ablation.py \
 # 三个检测已并入 proof_consistency_audit.py（检测 10/11/12），跑一次全量审计即自动触发
 
 
+# Stage 3.5 物理内容审计门控（定义重言式检测, 新增 v2.15.0, V64 教训）
+# 把「0 sorry/0 axiom 编译通过」与「物理内容非平凡」区分开：检测字面恒等重言式 +
+# 定义重言式（rw/unfold 展开结论定义 + 无实质 tactic）+ 浅层证明。
+python physical_content_audit.py \
+  --lean /path/to/proof.lean --output /tmp/content_audit.json      # BLOCK 则 paper 不生成
+python physical_content_audit.py --self-test                       # 离线自测
+
+
 # Stage 1.5a planted-truth gate (植物真值门, 新增 v2.13.0, BootLoops planted-truth)
 # 形式化前验证数值引擎能恢复已知植入答案(正对照) + 抓住故意污染输入(负对照)。
 python planted_truth_gate.py --self-test                        # 内置 SL6C 5正+1负对照
@@ -324,13 +357,13 @@ python constant_certify.py --target NAME --value X --ring "pi**2" "1" --height 1
 
 # Stage 3.6b — 接入 RSIHub（正式集成，2026-09-04）
 # 用 RSIHub 真实 operator 类 + 冻结评估器 + archive.jsonl 做 Lean 证据链自我进化
-cd ~/projects/RSIHub
-.venv/bin/python ./scripts/rsihub_lean_bridge.py \
+cd ~/AI_for_Science/RSIHub
+.venv/bin/python ~/skills/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
   --lean /path/to/proof.lean --generations 3 --output /tmp/lean_evo [--dry-run]
 # 详见 references/rsihub-lean-bridge.md + skill: rsihub
 
 # MAF bridge standalone
-cd ~/projects/math-agent-framework
+cd ~/AI_for_Science/math-agent-framework
 python maf_bridge.py
 ```
 
@@ -599,3 +632,163 @@ All five sub-skills must be installed:
 ## Environment
 
 Requires `DEEPSEEK_API_KEY` for LLM calls across all stages.
+
+---
+
+## SkillOpt 优化增量 (v2.16.0, 2026-10-07)
+
+**NEW in v2.16.0** (from SkillOpt checklist-based ReflACT, 2026-10-07): **Stage 3.5b 物理内容审计补充 8 类缺陷检测**。补齐物理内容审计的 8 个盲区：参数化伪装 / 状态升级 / 循环定义 / 假实数等式 / 孤立公理 / 换名复发 / import ghost 属性 / 嵌套注释 sorry 假阳性。每条规则含触发条件 + 反触发条件 + P0-P3 分级判据。
+
+---
+
+### c04 参数化伪装检测（Parameterized Disguise）
+
+**触发条件**（满足任一即触发）：
+- 定理/引理的结论中出现自由参数 `p`，且该参数在证明体内被赋值为某个具体观测常量（如 `p := 0.007297...`、`p := 137.036`），随后结论被当作"从第一性原理导出"。
+- `axiom`/`theorem` 签名含未约束自由变量，其取值仅由外部数值反推得到，且该变量未出现在任何前置假设或定义域约束中。
+- 证明中出现形如 `have h : f p = observed := by rfl` 或 `native_decide` 直接闭合数值的模式，而 `p` 无独立来源。
+
+**反触发条件**（不触发）：
+- 自由参数在签名中被显式量化并有物理来源注释（如 `(α : ℝ) (hα : α = fine_structure_constant)`）。
+- 参数为定理的显式输入（`theorem foo (p : ℝ) : ...`），且调用方负责提供，非证明体内反推。
+- 参数出现在 `variable` 块且被 `omit`/`include` 显式管理。
+
+**分级判据**：
+- P0（BLOCK）：结论声称"导出"但参数实为观测值反推，且无来源标注。
+- P1（WARN）：参数有来源但未在签名中约束。
+- P2（PASS）：参数显式量化且有来源注释。
+
+---
+
+### c05 状态升级检测（Status Escalation）
+
+**触发条件**（满足任一即触发）：
+- 声明关键字为 `theorem`/`lemma`，但证明体以 `sorry`、`admit`、`by assumption` 或未实例化的 `axiom` 收尾，且该声明在后续被当作已证事实引用。
+- 注释或文档字符串将 `axiom`/`hypothesis`/`Ansatz` 描述为 "theorem"、"proven"、"derived"。
+- 同一命题先以 `axiom` 声明，后以 `theorem` 重声明且证明体引用前者（循环升级）。
+
+**反触发条件**（不触发）：
+- 显式使用 `axiom` 关键字且文档一致标注为公理/假设。
+- `theorem` 证明体完整闭合（无 `sorry`/`admit`），即使依赖公理也属正常。
+- 临时 `sorry` 位于 `example` 或 `-- TODO` 标记的草稿块内。
+
+**分级判据**：
+- P0（BLOCK）：`theorem` 含 `sorry` 且被下游引用为已证。
+- P1（WARN）：文档措辞与关键字不一致但无下游依赖。
+- P2（PASS）：关键字与文档一致。
+
+---
+
+### c06 循环定义检测（Circular Definition）
+
+**触发条件**（满足任一即触发）：
+- 定义链 `A := f(B)` 且 `B := g(A)`，二者互引且无外部基例。
+- `def`/`abbrev`/`axiom` 的展开图存在有向环（可用 `#print axioms` 或依赖图工具检测）。
+- 定理 A 的证明引用定理 B，B 的证明引用 A，且无归纳/递归结构支撑。
+
+**反触发条件**（不触发）：
+- 递归定义有明确 `termination_by`/`decreasing_by` 且基例独立。
+- 互递归 `mutual` 块有结构递减证据。
+- 环中至少一个节点由外部公理或观测独立锚定。
+
+**分级判据**：
+- P0（BLOCK）：无基例的纯循环定义。
+- P1（WARN）：有基例但环未显式标注。
+- P2（PASS）：递归有终止证据。
+
+---
+
+### c07 假实数等式检测（False Real Equality）
+
+**触发条件**（满足任一即触发）：
+- `axiom`/`theorem` 断言两个实数精确相等，但右侧为十进制近似（如 `π = 3.14159`、`α = 0.00729735256`）。
+- 使用 `norm_num`/`decide` 闭合的等式实际依赖浮点截断。
+- 等式两侧差值小于 `1e-6` 但被声明为 `=` 而非 `≈` 或区间包含。
+
+**反触发条件**（不触发）：
+- 显式使用 `≈`、`|x - y| < ε` 或 `Set.Icc` 区间形式。
+- 等式为定义（`def π := Real.pi`）而非断言。
+- 近似值有 `-- approximation, exact value in ref` 注释且不参与下游精确推理。
+
+**分级判据**：
+- P0（BLOCK）：精确 `=` 断言十进制近似且被下游当精确值用。
+- P1（WARN）：近似等式无注释。
+- P2（PASS）：使用 `≈` 或区间形式。
+
+---
+
+### c08 孤立公理检测（Orphan Axiom）
+
+**触发条件**（满足任一即触发）：
+- `axiom` 声明后在整个项目中被引用次数为 0（可用 `#print axioms` 反向扫描或 grep 引用）。
+- 公理仅在自身声明文件出现，无 `import` 方使用。
+- 公理被 `@[simp]` 等属性标记但无重写目标。
+
+**反触发条件**（不触发）：
+- 公理位于 `Scratch`/`Draft`/`_archive` 目录且显式标注为未使用。
+- 公理为对外 API 的一部分（`public` 且文档标注为接口）。
+- 公理被 `export` 或列入 `@[expose]`。
+
+**分级判据**：
+- P1（WARN）：孤立公理无标注。
+- P2（PASS）：孤立但有归档标注或对外接口说明。
+- P0（BLOCK）：孤立公理被下游间接引用为已证事实（结合 c05）。
+
+---
+
+### c09 换名复发检测（Renamed Recurrence）
+
+**触发条件**（满足任一即触发）：
+- 本轮新增 `axiom` 的签名（类型表达式规范化后）与上一轮已删除缺陷公理的签名同构，仅标识符名不同。
+- 公理体/注释与历史删除记录语义等价（可用规范化哈希或 AST diff 比对）。
+- 同一物理断言以 `axiom foo_v2`、`axiom foo'`、`axiom foo_alt` 等形式重现。
+
+**反触发条件**（不触发）：
+- 新公理有独立来源引用且签名实质不同（参数、量词结构变化）。
+- 历史删除记录标注为 "superseded by" 且新公理为显式替代。
+- 名称相似但类型不同构。
+
+**分级判据**：
+- P0（BLOCK）：签名同构且无新来源。
+- P1（WARN）：签名相似但来源存疑。
+- P2（PASS）：有独立来源且签名实质不同。
+
+---
+
+### c11 import ghost 属性检测（Import Ghost Attribute）
+
+**触发条件**（满足任一即触发）：
+- 代码使用 `@[honest_axiom]`、`@[verified]`、`@[proven]` 等自定义属性装饰声明，但注册该属性的文件（含 `register_attribute`/`initialize` 的模块）不存在或未被 `import`。
+- 属性名在 `import` 图中无定义，Lean 静默忽略（不报错）。
+- 属性被用于绕过审计（如标记 `axiom` 为"已验证"）。
+
+**反触发条件**（不触发）：
+- 属性注册文件存在且被显式 `import`。
+- 属性为 Lean 核心/标准库内置（如 `@[simp]`、`@[reducible]`）。
+- 属性在 `lakefile` 的依赖中可解析。
+
+**分级判据**：
+- P0（BLOCK）：ghost 属性用于标记公理为已证。
+- P1（WARN）：ghost 属性存在但未影响审计结论。
+- P2（PASS）：属性注册文件存在且被 import。
+
+---
+
+### c12 嵌套注释 sorry 假阳性（Nested Comment Sorry False Positive）
+
+**触发条件**（用于抑制误报）：
+- 检测工具在 `/- ... -/` 块注释内匹配到 `sorry`/`admit` 关键字并报告。
+- `sorry` 位于 `--` 行注释内。
+- `sorry` 位于字符串字面量内（如 `"sorry"`）。
+
+**反触发条件**（即真正触发 sorry 检测的条件）：
+- `sorry` 位于块注释外的实际代码位置。
+- `sorry` 位于 `/- ... -/` 嵌套块的外层之后（Lean 4 支持嵌套注释，需正确配对）。
+- `sorry` 位于 `docComment`（`/-- ... -/`）内但该 docComment 被 `#check` 等实际求值。
+
+**分级判据**：
+- P3（PASS）：`sorry` 在注释/字符串内，确认为假阳性，不报告。
+- P0（BLOCK）：`sorry` 在活跃代码中（由 c05 处理）。
+- P1（WARN）：嵌套注释配对存疑，需人工复核。
+
+**实现提示**：解析时需维护注释嵌套深度计数器，仅在深度为 0 时匹配 `sorry`。

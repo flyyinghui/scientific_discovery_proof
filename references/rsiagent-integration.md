@@ -130,3 +130,49 @@ actions→conditions→consequences 可复用因果记忆：
 - **P5**：记忆冻结复用（证明模板库冻结，跨猜想迁移）
 - **P6**：Stage 2.5 课程队列与 Stage 3.6d 深挖的闭环（课程生成的任务队列当前是
   独立产出，未自动反馈到 Stage 3 的 MCTS 分支选择）
+
+## 复审补充（2026-10-05，代码深读新增发现）
+
+代码（`AetherLabsAI/RSIAgent`，16,401 行）深读后，发现原集成遗漏的三个**元层增量**
+（论文正文有、但 v2.8.0 只落地了"检测证明缺陷"层，未落地"诊断进化循环自身停滞"层）：
+
+### P0-① 三大改进极限（RSI 自身的失败模式）
+
+论文失败分析归纳 RSI 的三个改进极限（README: "three limits to improvement"）：
+1. **Insufficiently Targeted Exploration** — 练习没对准相关弱点
+2. **Incomplete Verification** — 验证接受不完整工作
+3. **Unreliable Memory Consolidation** — 记忆固化了错误规则
+
+这是**元层洞察**：它解释了 Stage 3.6/3.6d 进化循环为何平台化。当前集成只检测
+论文/Lean 的失败模式（检测 7/8/9），未检测进化循环自身的停滞原因。可落地为
+Stage 3.6 的停滞诊断分支：进化 N 轮无增益时，判断三类中哪一类（练习错位/验证过松/
+记忆污染），对应不同修复策略。`docs/PAPER.md` 源术语：Insufficiently Targeted
+Exploration / Incomplete Verification / Unreliable Memory Consolidation。
+
+### P0-② 密封评估器隔离（sealed evaluation）
+
+代码强调官方评分严格保持在学习循环之外，evaluator 输出**不能回流**进学习循环
+（防 reward hacking）。`core/self_evolving_loop.py` 注释："No score or evaluator
+output is accepted by any hook." 当前 Stage 3.6 用 RSIHub 冻结评估器（MathCode 评分），
+但可强化"密封"纪律：评估器输出只用于门控，不进入 archive.jsonl 作为学习信号。
+
+### P0-③ learn_on_pass + curriculum_after_pass
+
+代码强调"grounded successes AND failures both teach"——PASS 也能提炼对比性经验
+（`SelfEvolvingLoopHooks.learn_on_pass` / `curriculum_after_pass`）。现有集成只做
+失败驱动练习（curriculum_planner.py 的 failure-driven），缺"成功经验的对比学习"分支。
+
+### 其他代码级机制（映射到未落地 P4-P6）
+
+- **Verifier 完整隔离**（P4 的具体实现）：`docs/ARCHITECTURE.md` — "rollback-protected
+  candidate with Actor's private artifacts hidden"，Verifier 检查回滚保护的候选 + 隐藏
+  Actor 私有工件，比"同模型不同 prompt"更严格。
+- **边界提交 + 原子写入**：`explore/memory_hash.py` canonical SHA-256 + `_atomic_json`/
+  `_atomic_text`，记忆只在有效边界提交、原子写防半写。映射 Stage 3.6 archive.jsonl 的
+  原子写纪律。
+- **STALLED vs 收敛区分**：`EvolutionStatus.STALLED` 是语义停止条件（非 correctness），
+  "STALLED and budget exits must remain distinguishable from successful convergence"。
+  映射 Stage 3.6 门控逻辑，防把预算耗尽误判为成功收敛。
+- **记忆是"提示"非"事实"**：`explore/charter.py` memory_preamble — "They may be wrong,
+  outdated, or inapplicable: treat them as hints and verify against the live environment"。
+  可强化为大脑召回 prompt 层纪律。

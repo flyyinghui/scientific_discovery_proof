@@ -19,7 +19,7 @@ from datetime import datetime
 # ── Configuration ────────────────────────────────────────────
 
 PIPELINE_ROOT = Path(__file__).resolve().parent.parent
-PROJECT_ROOT = Path("/mnt/d/ai_for_science")
+PROJECT_ROOT = Path("~/<projects>")
 
 STAGE_SCRIPTS = {
     1: {  # SciExplorer
@@ -315,7 +315,13 @@ def run_stage3_ppe(conjecture_path: Path, stage2_output: dict, output_dir: Path)
     # 公理计数/定理存在性/空壳证明/离散谱错误（固化自三轮终审）。
     audit = _run_stage35_consistency_audit(proof_dir, conjecture_path, output_dir)
     result['stage35_audit'] = audit
-    
+
+    # ── Stage 3.5b: 物理内容审计门控（v2.15.0）─────────────────
+    # [v2.15.0] 检测定义重言式 / 浅层证明（0 sorry 但无物理内容），
+    # 固化自 V64 瞬子 bound 教训（unfold def + linarith 的重言式）。
+    physical_audit = _run_stage35b_physical_content_audit(proof_dir, output_dir)
+    result['stage35b_physical_content_audit'] = physical_audit
+
     # ── Stage 3.5c: 证明 DAG 审计（v2.4.0）────────────────────
     dag_audit = _run_stage35c_dag_audit(proof_dir, output_dir)
     result['stage35c_dag_audit'] = dag_audit
@@ -388,6 +394,66 @@ def _run_stage35_consistency_audit(proof_dir: Path, conjecture_path: Path, outpu
         audit_result = {'stage': 3.5, 'status': 'error', 'error': str(e)}
         print(f"[Stage3.5] ⚠️ Audit error: {e}")
     
+    return audit_result
+
+
+def _run_stage35b_physical_content_audit(proof_dir: Path, output_dir: Path) -> dict:
+    """Stage 3.5b: 物理内容审计门控（定义重言式 / 浅层证明检测，v2.15.0）。
+
+    把「0 sorry / 0 axiom 编译通过」与「物理内容非平凡」区分开。
+    检测三类：① 字面恒等重言式（X=X / X≥X）→ BLOCK；② 定义重言式
+    （rw/unfold 展开结论定义 + 无实质 tactic）→ BLOCK；③ 浅层证明
+    （无 calc/have/ring/exact 等实质 tactic）→ WARN。
+    """
+    print("\n" + "="*60)
+    print("STAGE 3.5b: Physical Content Audit (definitional-tautology gate)")
+    print("="*60)
+
+    lean_files = sorted(proof_dir.glob("*.lean")) if proof_dir.exists() else []
+    if not lean_files:
+        print("[Stage3.5b] ⚠️ No .lean file found in proof_dir — skipping audit")
+        return {'stage': '3.5b', 'status': 'skipped', 'reason': 'no lean file'}
+
+    lean_path = lean_files[0]
+    audit_script = Path(__file__).resolve().parent / "physical_content_audit.py"
+    if not audit_script.exists():
+        print(f"[Stage3.5b] Audit script not found at {audit_script} — skipping audit")
+        return {'stage': '3.5b', 'status': 'skipped', 'reason': 'audit script not found'}
+
+    cmd = [
+        VENV_PYTHON, str(audit_script),
+        "--lean", str(lean_path),
+        "--output", str(output_dir / "physical_content_audit_report.json"),
+    ]
+
+    print(f"[Stage3.5b] Auditing physical content: {lean_path.name}")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        print(proc.stdout)
+        gate = "PASS"
+        audit_json_path = output_dir / "physical_content_audit_report.json"
+        if audit_json_path.exists():
+            try:
+                report = json.loads(audit_json_path.read_text())
+                gate = report.get("gate", "PASS")
+            except Exception:
+                gate = "BLOCK" if proc.returncode != 0 else "PASS"
+        audit_result = {
+            'stage': '3.5b',
+            'status': 'completed',
+            'exit_code': proc.returncode,
+            'gate': gate,
+            'lean_file': str(lean_path),
+            'timestamp': datetime.now().isoformat(),
+        }
+        if gate == 'BLOCK':
+            print("[Stage3.5b] 🔴 GATE BLOCKED — definitional tautologies (0 sorry but no physical content)")
+        elif gate == 'WARN':
+            print("[Stage3.5b] 🟡 GATE WARN — shallow proofs (trivial lemmas) need review")
+    except Exception as e:
+        audit_result = {'stage': '3.5b', 'status': 'error', 'error': str(e)}
+        print(f"[Stage3.5b] ⚠️ Audit error: {e}")
+
     return audit_result
 
 
@@ -688,7 +754,7 @@ def main():
     parser = argparse.ArgumentParser(description='Scientific Discovery Pipeline')
     parser.add_argument('--conjecture', required=True, help='Path to conjecture.json')
     parser.add_argument('--output', default='/tmp/sdp_output', help='Output directory')
-    parser.add_argument('--stages', default='1,2,3,4', help='Stages to run (comma-separated: 1,2,3,3.5c,3.6,4; Stage 3 auto-includes 3.5+3.5c audits)')
+    parser.add_argument('--stages', default='1,2,3,4', help='Stages to run (comma-separated: 1,2,3,3.5c,3.6,4; Stage 3 auto-includes 3.5+3.5b+3.5c audits)')
     parser.add_argument('--deepseek-key', help='DeepSeek API key (or set DEEPSEEK_API_KEY)')
     parser.add_argument('--evo-generations', type=int, default=3, help='Stage 3.6 evolution generations (default 3)')
     args = parser.parse_args()
@@ -738,7 +804,24 @@ def main():
             results[3] = run_stage3_ppe(conjecture_path, results.get(2, {}), output_dir)
         
         elif stage_num == 4:
-            results[4] = run_stage4_paper(conjecture_path, results.get(3, {}), output_dir)
+            # [v2.15.0] Stage 3.5 门控真正生效：任一审计 BLOCK 则阻止论文生成
+            stage3 = results.get(3, {})
+            blocked_gates = []
+            for key, label in [
+                ('stage35_audit', '3.5 自洽性审计'),
+                ('stage35b_physical_content_audit', '3.5b 物理内容审计'),
+                ('stage35c_dag_audit', '3.5c DAG 审计'),
+            ]:
+                g = stage3.get(key, {}).get('gate', 'PASS')
+                if g == 'BLOCK':
+                    blocked_gates.append(f"{label}")
+            if blocked_gates:
+                print(f"\n🔴 Stage 4 BLOCKED — 门控未通过: {', '.join(blocked_gates)}")
+                print("   （自洽性缺陷 / 定义重言式 / 悬空引用未修复，跳过论文生成）")
+                results[4] = {'stage': 4, 'status': 'blocked',
+                              'reason': 'gates blocked: ' + ', '.join(blocked_gates)}
+            else:
+                results[4] = run_stage4_paper(conjecture_path, results.get(3, {}), output_dir)
         
         elif stage_num == '3.5c':
             # Standalone: run proof DAG audit on existing proof output

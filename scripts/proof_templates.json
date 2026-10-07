@@ -1,0 +1,77 @@
+{
+  "_comment": "证明模式模板库（P5 记忆冻结复用落地）。这些模板来自已通过 MathCode 验证的证明模式，新猜想证明时按缺陷类型/证明模式检索注入 few-shot。来源均为 physics-proof-engine / scientific-discovery-proof 的 references 实录。",
+  "templates": [
+    {
+      "id": "conditional_theorem_refactor",
+      "defect_types": ["unused_axioms", "performative_honesty"],
+      "trigger": "定理推导依赖研究级开放前提（如 Eldan-Chen 局部化 / Atiyah-Singer 非紧推广），却被压成无条件 axiom",
+      "pattern": "把无条件公理化重构为条件定理：前提显式化为 axiom ... : Prop，定理体保持 100% forward inference，同时提供 xxx_main（公理实例化）+ xxx_conditional（条件形式）双版本",
+      "few_shot_before": "axiom scaling_solution : ∀ M, ∃ μ, M = μ  -- 隐藏开放前提",
+      "few_shot_after": "axiom eldan_chen_localization : Prop\n\ntheorem scaling_solution_conditional (h : eldan_chen_localization) :\n    ∀ M, ∃ μ, M = μ := by intro M; exact ⟨M, rfl⟩\n\ntheorem scaling_solution_main := scaling_solution_conditional eldan_chen_localization_axiom",
+      "source": "scientific-discovery-proof v2.5.0 references/p04-conditional-theorem-refactoring.md"
+    },
+    {
+      "id": "honest_axiom_declare",
+      "defect_types": ["sorry", "admit"],
+      "trigger": "sorry/admit 无法从第一性原理导出（如 FRG 流方程、N_e 积分），需显式声明为诚实公理",
+      "pattern": "把 sorry 替换为显式 axiom 声明，附文献引用注释 [honest-axiom]，而非保留未完成证明",
+      "few_shot_before": "theorem wetterich_flow : ∂_k Γ_k = ... := by sorry",
+      "few_shot_after": "/- [honest-axiom] FRG Wetterich 方程，见 Wetterich 1993, Phys.Lett.B 301:90 -/\naxiom wetterich_flow : ∂_k Γ_k = ...",
+      "source": "physics-proof-engine references/reviewer-driven-proof-fixing.md"
+    },
+    {
+      "id": "trivial_stub_replace",
+      "defect_types": ["trivial_or_true_stub"],
+      "trigger": "theorem 体为 := by trivial / := True 空壳（DeepSeek v4-flash 常见缺陷）",
+      "pattern": "替换为真实策略体：calc 链 / nlinarith / field_simp / ring / exact ..._axiom / native_decide",
+      "few_shot_before": "theorem kls_geometric : λ_KLS = 35/3 := by trivial",
+      "few_shot_after": "theorem kls_geometric : λ_KLS = 35/3 := by\n  calc λ_KLS = dim_R / 3 := kls_scaling dim_R\n       _ = 35 / 3 := by norm_num",
+      "source": "scientific-discovery-proof v2.5.0 / physics-proof-engine references/deepseek-trivial-proof-pitfall.md"
+    },
+    {
+      "id": "golden_gate_print_axioms",
+      "defect_types": ["axiom_consistency"],
+      "trigger": "声称 0 sorry 但公理可能是研究级开放前提，需黄金门控验证",
+      "pattern": "条件定理 #print axioms 应只依赖经典逻辑三件套 [propext, Classical.choice, Quot.sound]，不出现任何研究级 axiom = 证据链闭合",
+      "few_shot_before": "#print axioms main_theorem  -- 输出含 15 个研究级 axiom",
+      "few_shot_after": "#print axioms main_theorem\n-- 仅 [propext, Classical.choice, Quot.sound] = 黄金门控通过",
+      "source": "scientific-discovery-proof v2.6.0 references/p05-p06-p07-unification-and-gtc-fix.md"
+    },
+    {
+      "id": "zero_axiom_reconstruction",
+      "defect_types": ["sorry", "unused_axioms"],
+      "trigger": "旧版靠 N 条 axiom 闭合，需 0 公理干净重构",
+      "pattern": "手术式提取已编译定理 + 公理降级为 def/诚实注释，重建为 0 axiom / 0 sorry，黄金门控 #print axioms 仅 [propext, Classical.choice, Quot.sound]",
+      "few_shot_before": "axiom timecharge_nuR_duality : ...  -- 39 条 axiom 闭合",
+      "few_shot_after": "def timecharge_nuR_duality : Prop := ...  -- 降级为 def，0 axiom",
+      "source": "physics-proof-engine references/zero-axiom-proof-reconstruction.md"
+    },
+    {
+      "id": "tactic_body_complete",
+      "defect_types": ["trivial_or_true_stub", "sorry"],
+      "trigger": "证明体缺实质 tactic，只有空壳或 sorry",
+      "pattern": "补全实质 tactic：field_simp 消分母 / ring 多项式恒等式 / nlinarith 线性不等式 / calc 链式推导",
+      "few_shot_before": "theorem gaussian_completion : A = B := by sorry",
+      "few_shot_after": "theorem gaussian_completion : A = B := by\n  field_simp [A, B]\n  ring",
+      "source": "physics-proof-engine references/v5-v6-proof-merge-pattern.md"
+    },
+    {
+      "id": "lemma_decompose",
+      "defect_types": ["sorry", "trivial_or_true_stub"],
+      "trigger": "过长定理证明体无法一次完成，导致 sorry 残留",
+      "pattern": "把过长定理分解为若干中间引理，先证引理再用引理拼装主定理",
+      "few_shot_before": "theorem master_eq : big_conclusion := by sorry  -- 太长写不完",
+      "few_shot_after": "lemma step1 : intermediate1 := by nlinarith\nlemma step2 : intermediate2 := by field_simp\n\ntheorem master_eq : big_conclusion := by\n  have h1 := step1; have h2 := step2\n  linarith [h1, h2]",
+      "source": "physics-proof-engine references/flash-lean-generation-5round-iteration.md"
+    },
+    {
+      "id": "convert_additive_misalignment",
+      "defect_types": ["sorry", "admit"],
+      "trigger": "HasDerivAt convert 加法错位匹配，生成 Sc=-J+Sc 假目标",
+      "pattern": "convert 错位时改用显式 rw 系数恒等式，避免 convert 多分支 rfl 关不掉 typeclass goal",
+      "few_shot_before": "theorem total_charge_hasDerivAt : HasDerivAt ... := by\n  convert ...  -- 生成 Sc = -J + Sc 假目标",
+      "few_shot_after": "theorem total_charge_hasDerivAt : HasDerivAt ... := by\n  rw [coefficient_identity]\n  exact hasDerivAt_add ...",
+      "source": "physics-proof-engine references/convert-additive-misalignment-hasderivat.md"
+    }
+  ]
+}

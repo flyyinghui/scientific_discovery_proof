@@ -17,6 +17,12 @@ Dream-RSI（arXiv 2609.14858）增量增强（P0-P2，见 replay_strategies.py�
   P1  off-policy 反馈  : 变异前做盲区检测（哪些缺陷历史从未修复成功），注入诊断 prompt。
   P2  变异策略显式化   : 单一「诊断→修复」拆成 5 个可评估策略，ε-greedy 动态选择。
 
+RSIAgent 复审增量（2026-10-05，代码深读新增）：
+  P0-① 三大改进极限元诊断 : 连续停滞时判断根因（练习错位/验证过松/记忆污染），注入下轮诊断。
+  P0-② 密封评估器 + 防 reward hack : 检测缺陷等价替换（sorry→admit 等），等价替换即拒绝。
+  P0-③ learn_on_pass : 分数不退化（≥）也记录为「成功经验」，供 replay 学习「不退化」先例。
+  P5  证明模式模板库 : 从 proof_templates.json 检索已冻结证明模式，注入 mutate prompt 作 few-shot。
+
 循环：select(父代) → replay 选策略 → analyze(DeepSeek 诊断 + 盲区提示) →
       mutate(DeepSeek 按策略修复) → gate(严格改进才接受) → record(archive.jsonl 带策略)
 
@@ -43,6 +49,7 @@ from datetime import datetime
 from pathlib import Path
 
 from replay_strategies import ReplaySimulator, MUTATION_STRATEGIES, DEFECT_PRIORITY, defect_signature
+from proof_template_library import load_templates, select_templates, render_few_shot
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 VENV_PYTHON = "/usr/local/lib/hermes-agent-v14/venv/bin/python"
@@ -96,6 +103,73 @@ def evaluate_lean(lean_text: str, dag_report: dict | None) -> dict:
     return {"score": round(score, 1), "defects": defects}
 
 
+# ── P0-② 密封评估器 + 防 reward hack ────────────────────────────
+
+def _detect_reward_hack(before: dict, after: dict) -> str | None:
+    """检测缺陷等价替换（分数虚高但证明实质没完成）。
+
+    RSIAgent「Incomplete Verification」极限：验证会接受不完整工作。
+    LLM 修复者可能学会把 sorry 改成 admit、把 := by trivial 改成 sorry，
+    让冻结评估器分数虚高但证明实质没完成。这类等价替换必须拒绝（即使分数提高）。
+    返回 hack 描述字符串；无 hack 返回 None。
+    """
+    b, a = before, after
+
+    def incomplete(d: dict) -> int:
+        return (d.get("sorry", 0) + d.get("admit", 0) + d.get("trivial_or_true_stub", 0))
+
+    # 1) sorry → admit 等价替换（都是「未完成证明」，只是换名字）
+    if a.get("sorry", 0) < b.get("sorry", 0) and a.get("admit", 0) > b.get("admit", 0):
+        return "sorry→admit 等价替换：把 sorry 改写成 admit，未完成证明只是换了个名字"
+    # 2) 空壳 → sorry 等价替换（:= by trivial 改成 sorry）
+    if (a.get("trivial_or_true_stub", 0) < b.get("trivial_or_true_stub", 0)
+            and a.get("sorry", 0) > b.get("sorry", 0)):
+        return "空壳→sorry 等价替换：把 := by trivial 改成 sorry，未完成证明总量未降"
+    # 3) 未完成证明总量不降反升（sorry + admit + 空壳）
+    if incomplete(a) > incomplete(b):
+        return (f"未完成证明总量增加（{incomplete(b)} → {incomplete(a)}）："
+                f"实质退化，分数虚高是 reward hack")
+    return None
+
+
+# ── P0-① 三大改进极限元诊断 ─────────────────────────────────────
+
+def _diagnose_stall(stall_counter: int, current: dict, replay: ReplaySimulator,
+                    blinds: list[str], strat_name: str) -> str | None:
+    """连续停滞时判断根因（RSIAgent 三大改进极限），注入下轮诊断。
+
+      1. Insufficiently Targeted Exploration（练习没对准弱点）
+      2. Incomplete Verification（验证接受不完整工作）
+      3. Unreliable Memory Consolidation（记忆固化错误规则）
+    返回诊断文本（供 _analyze 注入）或 None（未达停滞阈值）。
+    """
+    if stall_counter < 2:
+        return None
+    causes = []
+    # 3) 记忆污染：replay 推荐了历史上 success_rate == 0 的策略
+    stats = replay.strategy_stats()
+    s = stats.get(strat_name, {})
+    if s.get("attempts", 0) > 0 and (s.get("success_rate") or 0.0) == 0.0:
+        causes.append(
+            f"Unreliable Memory Consolidation：策略「{strat_name}」历史成功率 0% 却被 replay "
+            f"推荐，先验可能被污染，建议加大 ε 探索率换策略")
+    # 1) 练习错位：当前活跃缺陷全是历史盲区（从未被任何策略修复过）
+    if blinds:
+        causes.append(
+            f"Insufficiently Targeted Exploration：以下缺陷是历史盲区（从未修复成功），"
+            f"练习没对准弱点：{', '.join(blinds)}")
+    # 2) 验证过松：分数高但仍有核心缺陷（sorry/admit 残留）被轻判
+    if (current.get("score", 0) >= 85
+            and (current.get("defects", {}).get("sorry", 0) > 0
+                 or current.get("defects", {}).get("admit", 0) > 0)):
+        causes.append(
+            "Incomplete Verification：分数高（≥85）但仍有 sorry/admit 残留，"
+            "评估器对严重缺陷扣分过松，门控未拦截不完整工作")
+    if not causes:
+        causes.append("未明确：可能只是局部最优，建议换一种变异策略或加大 ε 探索率")
+    return "；".join(causes)
+
+
 # ── LLM 诊断 / 修复（DeepSeek）───────────────────────────────────
 
 def _load_api_key() -> str:
@@ -125,8 +199,8 @@ def _deepseek(client, model: str, prompt: str, max_tokens: int) -> str:
 
 
 def _analyze(client, lean_text: str, defects: dict, strat_name: str, blinds: list[str],
-             precedents: list[dict] = None) -> str:
-    """v4-pro 诊断：读缺陷报告 + 当前策略 + 盲区提示 + 成功先例，给出根因 + 精确修复计划。"""
+             precedents: list[dict] = None, stall_diagnosis: str = None) -> str:
+    """v4-pro 诊断：读缺陷报告 + 当前策略 + 盲区提示 + 成功先例 + 停滞诊断，给出根因 + 精确修复计划。"""
     strat_cfg = MUTATION_STRATEGIES.get(strat_name, {})
     blind_note = ""
     if blinds:
@@ -145,29 +219,41 @@ def _analyze(client, lean_text: str, defects: dict, strat_name: str, blinds: lis
             f"\n\n【历史成功先例】(P3 因果记忆：相同缺陷签名 {defect_signature(defects)} 下"
             f"被证明有效的动作)：{items}。请优先借鉴这些动作。\n"
         )
+    stall_note = ""
+    if stall_diagnosis:
+        stall_note = (
+            f"\n\n【进化停滞诊断】(P0-① 三大改进极限)：连续多代无增益，根因判断如下——\n"
+            f"{stall_diagnosis}。\n请针对上述根因调整修复策略，不要重复已证明无效的做法。\n"
+        )
     prompt = f"""你是 Lean 4 形式化证明专家。下面是当前证明的冻结评估器缺陷报告（确定性检测，非 LLM 判断）：
 
 {json.dumps(defects, ensure_ascii=False, indent=2)}
 
 【本轮变异策略】{strat_cfg.get('desc', strat_name)}
 策略侧重：{strat_cfg.get('focus', '综合修复')}
-{blind_note}{precedent_note}
+{blind_note}{precedent_note}{stall_note}
 请诊断每类缺陷的根因，并给出**聚焦于本策略侧重**的精确修复计划（哪些 sorry/admit 要补证明体、
 哪些 := by trivial / := True 是空壳要替换成真实策略、哪些冗余引理要删除或接入、
 哪些未用 axiom 要接入证明链或删掉）。输出简洁的中文修复计划，不要输出代码。"""
     return _deepseek(client, "deepseek-v4-pro", prompt, 2048)
 
 
-def _mutate(client, lean_text: str, repair_plan: str, strat_name: str) -> str:
-    """v4-flash 修复：按修复计划 + 策略侧重产出修复后的完整 Lean 文件。"""
+def _mutate(client, lean_text: str, repair_plan: str, strat_name: str, few_shot: str = "") -> str:
+    """v4-flash 修复：按修复计划 + 策略侧重 + 已冻结证明模式(few-shot)产出修复后的完整 Lean 文件。"""
     strat_cfg = MUTATION_STRATEGIES.get(strat_name, {})
+    few_shot_note = ""
+    if few_shot:
+        few_shot_note = (
+            f"\n\n【已冻结证明模式 few-shot】(P5 记忆冻结复用：以下是历史上已通过验证的修复模式，"
+            f"请优先套用对应模式，不要另起炉灶)：\n{few_shot}\n"
+        )
     prompt = f"""你是 Lean 4 形式化证明专家。按下面的修复计划修复 Lean 证明文件。
 
 【修复计划】
 {repair_plan}
 
 【本轮策略侧重】{strat_cfg.get('focus', '综合修复')}
-
+{few_shot_note}
 【当前证明文件】
 ```lean
 {lean_text}
@@ -237,6 +323,8 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
         print("[Stage3.6] dry-run 模式：仅评估，不调用 LLM")
         _report_replay(replay, current["defects"])
     else:
+        templates = load_templates()   # P5: 已冻结证明模式库
+        stall_counter = 0               # P0-①: 连续无增益代数
         for gen in range(1, generations + 1):
             # P2: ε-greedy 选择变异策略
             strategy = replay.choose(current["defects"], epsilon)
@@ -249,16 +337,23 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
             blinds = replay.blind_spots(current["defects"])
             # P3: 因果记忆成功先例（相同缺陷签名下被证明有效的动作）
             precedents = replay.condition_match(current["defects"])
+            # P0-①: 三大改进极限元诊断（连续停滞时判断根因）
+            stall_diagnosis = _diagnose_stall(stall_counter, current, replay, blinds, strat_name)
 
             print(f"\n[Gen {gen}] 策略={strat_name}（{MUTATION_STRATEGIES[strat_name]['desc']}）")
             if blinds:
                 print(f"          ⚠️ 历史盲区: {', '.join(blinds)}")
             if precedents:
                 print(f"          💡 成功先例: {len(precedents)} 条（condition={defect_signature(current['defects'])}）")
+            if stall_diagnosis:
+                print(f"          🧭 停滞诊断: {stall_diagnosis}")
 
-            repair_plan = _analyze(client, current_text, current["defects"], strat_name, blinds, precedents)
+            repair_plan = _analyze(client, current_text, current["defects"], strat_name,
+                                   blinds, precedents, stall_diagnosis)
             print(f"[Gen {gen}] 修复中...")
-            mutated = _mutate(client, current_text, repair_plan, strat_name)
+            # P5: 检索已冻结证明模式作 few-shot（记忆冻结复用）
+            few_shot = render_few_shot(select_templates(templates, current["defects"]))
+            mutated = _mutate(client, current_text, repair_plan, strat_name, few_shot)
 
             # 规范化评估：把变异结果写临时文件，跑 DAG 审计
             tmp_lean = output_dir / f"gen{gen}_candidate.lean"
@@ -266,12 +361,18 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
             dag_report = _run_dag_audit(tmp_lean, output_dir)
             candidate = evaluate_lean(mutated, dag_report)
 
-            accepted = candidate["score"] > current["score"]
+            # P0-② 密封评估器 + 防 reward hack：等价替换即拒绝（即使分数提高）
+            hack = _detect_reward_hack(current["defects"], candidate["defects"])
+            accepted = (candidate["score"] > current["score"]) and (hack is None)
+            # P0-③ learn_on_pass：分数不退化（≥）且无 hack 也记录为「成功经验」（不替换当前）
+            learn_on_pass = (candidate["score"] >= current["score"]) and (hack is None) and not accepted
+
             record = {
                 "generation": gen,
                 "score": candidate["score"],
                 "defects": candidate["defects"],
                 "accepted": accepted,
+                "learn_on_pass": learn_on_pass,
                 "parent_score": current["score"],
                 "gain": round(candidate["score"] - current["score"], 1),
                 "mutation_strategy": strat_name,
@@ -279,9 +380,11 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
                 "condition": defect_signature(current["defects"]),
                 "timestamp": datetime.now().isoformat(),
             }
+            if hack:
+                record["reward_hack"] = hack
             # P1-2 (Colosseum)：失败路径记录——精确失败点 + 变体可行条件。
             # 让 archive 从「被动记录」升级为「可复用失败知识目录」，变异前可注入避免重复踩坑。
-            if not accepted:
+            if not accepted and not learn_on_pass:
                 record["failed_approach"] = {
                     "route": strat_name,
                     "failure_point": _defect_summary(candidate["defects"]),
@@ -297,11 +400,19 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
                 print(f"[Gen {gen}] ✅ 接受：{current['score']} → {candidate['score']}  {_defect_summary(candidate['defects'])}")
                 current_text = mutated
                 current = candidate
+                stall_counter = 0
                 if current["score"] >= 100.0:
                     print("[Stage3.6] 收敛：满分达成")
                     break
+            elif hack:
+                print(f"[Gen {gen}] 🛡️ 拒绝（reward hack）: {hack}")
+                stall_counter += 1
+            elif learn_on_pass:
+                print(f"[Gen {gen}] 📌 记录成功经验（不退化 {current['score']} → {candidate['score']}，不替换）")
+                stall_counter += 1
             else:
                 print(f"[Gen {gen}] ❌ 拒绝：{candidate['score']} ≤ {current['score']}（保留父代）")
+                stall_counter += 1
 
     best_lean_path.write_text(current_text, encoding="utf-8")
     best = {"best_score": current["score"], "best_defects": current["defects"],
