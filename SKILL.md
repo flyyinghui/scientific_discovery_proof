@@ -8,7 +8,7 @@ description: >-
   70% time reduction vs standalone PPE. NEW v2.3: Stage −1 dual-use safety gateway,
   Stage 3.5 Hallucination Clipping (numeric claim ↔ Lean cross-reference + joint
   reliability objective), Stage 2 UCB exploration bonus, Stage 3 three-phase scaffolding.
-version: 2.16.0
+version: 2.18.0
 tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding, rsiagent, curriculum, exploration, planted-truth, constant-certification, bootloops]
 related_skills:
   - math-agent-framework (MAF stage 0)
@@ -357,13 +357,13 @@ python constant_certify.py --target NAME --value X --ring "pi**2" "1" --height 1
 
 # Stage 3.6b — 接入 RSIHub（正式集成，2026-09-04）
 # 用 RSIHub 真实 operator 类 + 冻结评估器 + archive.jsonl 做 Lean 证据链自我进化
-cd ~/AI_for_Science/RSIHub
-.venv/bin/python ~/skills/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
+cd ~/workspace/RSIHub
+.venv/bin/python ~/.hermes/skills/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
   --lean /path/to/proof.lean --generations 3 --output /tmp/lean_evo [--dry-run]
 # 详见 references/rsihub-lean-bridge.md + skill: rsihub
 
 # MAF bridge standalone
-cd ~/AI_for_Science/math-agent-framework
+cd ~/workspace/math-agent-framework
 python maf_bridge.py
 ```
 
@@ -632,6 +632,31 @@ All five sub-skills must be installed:
 ## Environment
 
 Requires `DEEPSEEK_API_KEY` for LLM calls across all stages.
+
+---
+
+## prove2me 形式化忠实性嫁接 (v2.18.0, 2026-10-08)
+
+**NEW in v2.18.0**: 从 prove2me_workspace 嫁接「形式化忠实性（faithfulness）审计」框架，五项增量全部增量嫁接（主线五阶段不动），完整评估见 `references/prove2me-integration-assessment.md`。
+
+- **P0-① Stage 3.5a Read-back 盲读回**：新增 `scripts/faithfulness_readback.py`，两阶段（盲读只给 Lean 代码 → 对比 read-back vs 猜想意图），检测 formalization 忠实性 gap。直接针对 V64 教训：把物理对象定义为重言式恒等式（S := 谱底·‖φ‖²+V）是 faithfulness gap，不是可编译性缺陷。已接入 `pipeline_orchestrator.py` 的 `_run_stage35a_faithfulness_readback`（Stage 3.5 之前，gate=BLOCK 时阻断）。
+- **P0-② Faithfulness 5 约束注入 PPE prompt**：`physics_proof_engine/reasoner.py` 的 `_build_proof_prompt` 注入 5 条（假设/结论双向匹配、禁止假设结论、退化输入、边缘输入、定义 vs 推导区分）。
+- **P1-③ typeDeps/valueDeps 区分**：`proof_dag_audit.py` 新增 `node_type_and_value` 拆分语句依赖 vs 证明依赖，新增 `unverified_definition_deps` 检测（定义层被陈述引用但从未被证明使用，WARN）。
+- **P1-④ Reduction 可复用激励**：`preproof_decomposer.py` 新增 `reusability` 字段 + REDUCTION REUSE RULE（分解为可复用核心引理，避免 trivial 转移）。
+- **P2-⑤ Milestone 里程碑**：新增 `scripts/milestone_curation.py`（显式 milestones 验证 / 从 required_lemmas 自动提名权威里程碑）。
+
+诚实边界：read-back 是 LLM 启发式审计（非形式化保证）；`unverified_definition_deps` 是语法层检测（可能有 typeclass 隐式使用的假阳性）——均 WARN 而非 BLOCK。
+
+---
+
+## EmbeddingGemma-2 集成 (v2.17.0, 2026-10-08)
+
+**NEW in v2.17.0**: **Stage 4.5 论文引用语义核查**。集成 EmbeddingGemma-2（litert-community/embeddinggemma-2-740m-litert-lm，768 维，int4 QAT，8K ctx）做幻影引用检测。
+
+- 新增 `scripts/semantic_reference_check.py`：在 reference_verification.py 的编号层核对之上，加 embedding 语义匹配层（引用上下文 vs 文献条目余弦相似度），用相对离群（Tukey 下界 Q1−1.5×IQR）而非绝对阈值检测疑似幻影引用。
+- 已接入 `pipeline_orchestrator.py` 的 `run_stage4_paper`（论文生成后自动运行 Stage 4.5，gate=WARN 不阻塞 Stage 4；EmbeddingGemma-2 不可用时优雅降级 PASS+note）。
+- 依赖 `litert-lm-api` + `ai-edge-litert`（LiteRT-LM 格式 `.litertlm`，**非** transformers/sentence-transformers）；封装模块 `embeddinggemma.py`（embed/cosine/semantic_match）软链到 Hermes venv site-packages，全局 `import embeddinggemma`。
+- **精度限制（务必知晓）**：int4 量化 edge 模型对学术文本区分度有限——真实引用相似度全挤在 0.68-0.80 窄带，适合语义检索/排序，**不适合**绝对阈值判断幻影引用。本阶段定位为「检索辅助 + 相对离群启发式」，只提示疑似幻影引用供人工复核，不承诺精确判定。若需高精度引用验证，用 text-embedding-3-large / bge-large 级别模型。
 
 ---
 

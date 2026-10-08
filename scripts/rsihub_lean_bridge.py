@@ -9,8 +9,8 @@ evaluator (`lean_eval`), recording append-only `archive.jsonl` lineage.
 
 Runs under the RSIHub Python 3.12 venv (so `evolve` + `library` import cleanly):
 
-    cd ~/AI_for_Science/RSIHub
-    .venv/bin/python ~/skills/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
+    cd ~/workspace/RSIHub
+    .venv/bin/python ~/.hermes/skills/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
         --lean /path/to/proof.lean --generations 3 --output /tmp/evo [--dry-run]
 
 The seed proof's defects drive DeepSeek mutation; the frozen evaluator is
@@ -30,9 +30,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-RSIHUB = Path("~/AI_for_Science/RSIHub")
+RSIHUB = Path("~/workspace/RSIHub")
 HERMES_PYTHON = "/usr/local/lib/hermes-agent-v14/venv/bin/python"
-DAG_AUDIT = Path("~/skills/scientific-discovery-proof/scripts/proof_dag_audit.py")
+DAG_AUDIT = Path("~/.hermes/skills/scientific-discovery-proof/scripts/proof_dag_audit.py")
 
 sys.path.insert(0, str(RSIHUB))          # for top-level `library` package
 sys.path.insert(0, str(RSIHUB / "src"))  # for `evolve` package

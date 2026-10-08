@@ -74,6 +74,7 @@ def _mock_decompose(conj: dict, strategy: dict) -> list:
             'content': f'Fix all variables and state the standing assumptions. '
                        f'Declare the honest-axioms needed for {target}.',
             'depends_on': [],
+            'reusability': 'low',
         },
     ]
     for i, lem in enumerate(lemmas, start=2):
@@ -81,11 +82,13 @@ def _mock_decompose(conj: dict, strategy: dict) -> list:
             'id': f'S{i}', 'title': f'Intermediate lemma: {lem}',
             'content': f'Establish {lem} using the setup of S1.',
             'depends_on': ['S1'],
+            'reusability': 'high',
         })
     sections.append({
         'id': f'S{len(sections)+1}', 'title': f'Main result: {target}',
         'content': f'Assemble the lemmas to prove {target} via {mechanism}.',
         'depends_on': [s['id'] for s in sections[1:]],
+        'reusability': 'high',
     })
     return sections
 
@@ -107,7 +110,13 @@ def _llm_decompose(conj: dict, strategy: dict, api_key: str) -> list:
         "  - title: short title\n"
         "  - content: the mathematical content to establish there\n"
         "  - depends_on: array of section ids it may use\n"
-        "Sections must form a DAG (no cycles). Return ONLY the JSON array."
+        "  - reusability: 'high' (reusable core lemma another proof could import), "
+        "'medium' (useful but narrow), or 'low' (bookkeeping step — should be rare)\n"
+        "Sections must form a DAG (no cycles).\n"
+        "REDUCTION REUSE RULE (prove2me): decompose into REUSABLE core lemmas, not trivial "
+        "steps. A bare 'have ... exact ...' transfer is NOT a section. Each section must be a "
+        "self-contained, mathematically meaningful result. Over-decomposing into trivial "
+        "non-reusable lemmas creates overhead and is discouraged. Return ONLY the JSON array."
     )
 
     resp = client.chat.completions.create(
@@ -188,6 +197,10 @@ def decompose(conjecture_path: str, strategy_path: str = None,
         'target': conj['target'],
         'strategy': strategy.get('id', 'none'),
         'n_sections': len(sections),
+        'reusability_distribution': {
+            level: sum(1 for s in sections if s.get('reusability') == level)
+            for level in ('high', 'medium', 'low')
+        },
         'sections': sections,
         'dependency_graph': dep_graph,
         'parallel_batches': batches,

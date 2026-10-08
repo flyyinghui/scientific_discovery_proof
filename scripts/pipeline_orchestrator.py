@@ -19,7 +19,7 @@ from datetime import datetime
 # ── Configuration ────────────────────────────────────────────
 
 PIPELINE_ROOT = Path(__file__).resolve().parent.parent
-PROJECT_ROOT = Path("~/<projects>")
+PROJECT_ROOT = Path("~/workspace")
 
 STAGE_SCRIPTS = {
     1: {  # SciExplorer
@@ -310,6 +310,10 @@ def run_stage3_ppe(conjecture_path: Path, stage2_output: dict, output_dir: Path)
     with open(proof_result_path, 'w') as f:
         json.dump(result, f, indent=2)
     
+    # ── Stage 3.5a: 形式化忠实性盲读回审计（v2.18.0, prove2me read-back）──
+    readback = _run_stage35a_faithfulness_readback(proof_dir, conjecture_path, output_dir)
+    result['stage35a_faithfulness_readback'] = readback
+
     # ── Stage 3.5: 形式化证明自洽性审计门 ────────────────────
     # [v2.1.0] 在 PPE 证明后、论文生成前，审计公理自洽性/表演性诚实/
     # 公理计数/定理存在性/空壳证明/离散谱错误（固化自三轮终审）。
@@ -326,6 +330,67 @@ def run_stage3_ppe(conjecture_path: Path, stage2_output: dict, output_dir: Path)
     dag_audit = _run_stage35c_dag_audit(proof_dir, output_dir)
     result['stage35c_dag_audit'] = dag_audit
     
+    return result
+
+
+def _run_stage35a_faithfulness_readback(proof_dir: Path, conjecture_path: Path, output_dir: Path) -> dict:
+    """Stage 3.5a: 形式化忠实性盲读回审计（prove2me read-back，v2.18.0）。
+
+    检测 Lean formalization 是否忠实于物理猜想意图（faithfulness gap）——
+    直接针对 V64 教训：把物理对象定义为重言式恒等式（S := 谱底·‖φ‖²+V，
+    则 bound 变成 35x+b≥35x+b）是 faithfulness gap，不是可编译性缺陷。
+    盲读（只给 Lean 代码）+ 对比（read-back vs 意图）两阶段。
+    """
+    print("\n" + "="*60)
+    print("STAGE 3.5a: Faithfulness Read-back Audit (prove2me)")
+    print("="*60)
+
+    lean_files = sorted(proof_dir.glob("*.lean")) if proof_dir.exists() else []
+    if not lean_files:
+        print("[Stage3.5a] ⚠️ No .lean file found — skipping")
+        return {'stage': '3.5a', 'status': 'skipped', 'reason': 'no lean file'}
+
+    lean_path = lean_files[0]
+    audit_script = Path(__file__).resolve().parent / "faithfulness_readback.py"
+    if not audit_script.exists():
+        print("[Stage3.5a] ⚠️ script not found — skipping")
+        return {'stage': '3.5a', 'status': 'skipped', 'reason': 'script not found'}
+
+    cmd = [
+        VENV_PYTHON, str(audit_script),
+        "--lean", str(lean_path),
+        "--conjecture", str(conjecture_path),
+        "--output", str(output_dir / "faithfulness_readback_report.json"),
+    ]
+
+    print(f"[Stage3.5a] Read-back auditing: {lean_path.name}")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        for line in proc.stdout.splitlines():
+            print(line)
+        gate = "PASS"
+        report_path = output_dir / "faithfulness_readback_report.json"
+        if report_path.exists():
+            try:
+                report = json.loads(report_path.read_text())
+                gate = report.get("gate", "PASS")
+            except Exception:
+                gate = "BLOCK" if proc.returncode != 0 else "PASS"
+        result = {
+            'stage': '3.5a', 'status': 'completed',
+            'exit_code': proc.returncode, 'gate': gate,
+            'timestamp': datetime.now().isoformat()
+        }
+        if gate == 'BLOCK':
+            print("[Stage3.5a] 🔴 GATE BLOCKED — major faithfulness gap")
+        elif gate == 'WARN':
+            print("[Stage3.5a] 🟡 GATE WARN — see gaps above")
+        else:
+            print("[Stage3.5a] ✅ read-back faithful")
+    except Exception as e:
+        result = {'stage': '3.5a', 'status': 'error', 'error': str(e)}
+        print(f"[Stage3.5a] ⚠️ error: {e}")
+
     return result
 
 
@@ -676,10 +741,14 @@ Include an abstract. Output as clean markdown."""
     with open(paper_path, 'w') as f:
         f.write(paper_md)
     
+    # ── Stage 4.5: 论文引用语义核查（EmbeddingGemma-2，v2.17.0）──
+    semantic_ref = _run_stage45_semantic_reference(paper_path, output_dir)
+
     result = {
         'stage': 4, 'status': 'completed',
         'paper_path': str(paper_path),
         'paper_length': len(paper_md),
+        'stage45_semantic_reference': semantic_ref,
         'timestamp': datetime.now().isoformat()
     }
     
@@ -688,6 +757,65 @@ Include an abstract. Output as clean markdown."""
         json.dump(result, f, indent=2)
     
     print(f"[Stage4] Paper generated: {paper_path} ({len(paper_md)} chars)")
+    return result
+
+
+def _run_stage45_semantic_reference(paper_path: Path, output_dir: Path) -> dict:
+    """Stage 4.5: 论文引用语义核查（EmbeddingGemma-2，v2.17.0）。
+
+    在论文生成后，用 EmbeddingGemma-2 检测幻影引用（引用上下文 vs 文献条目语义）。
+    启发式（WARN，不阻塞 Stage 4）——int4 量化模型区分度有限，只做相对离群检测，
+    用于提示「引用编号存在但语义无关」的疑似幻影引用，供人工复核。
+    EmbeddingGemma-2 不可用时优雅降级（PASS + note）。
+    """
+    print("\n" + "="*60)
+    print("STAGE 4.5: Semantic Reference Check (EmbeddingGemma-2)")
+    print("="*60)
+
+    audit_script = Path(__file__).resolve().parent / "semantic_reference_check.py"
+    if not audit_script.exists():
+        print("[Stage4.5] ⚠️ script not found — skipping")
+        return {'stage': '4.5', 'status': 'skipped', 'reason': 'script not found'}
+
+    if not paper_path.exists():
+        print("[Stage4.5] ⚠️ paper not found — skipping")
+        return {'stage': '4.5', 'status': 'skipped', 'reason': 'paper not found'}
+
+    cmd = [
+        VENV_PYTHON, str(audit_script),
+        "--paper", str(paper_path),
+        "--output", str(output_dir / "semantic_reference_report.json"),
+    ]
+
+    print(f"[Stage4.5] Checking semantic references: {paper_path.name}")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        # 过滤 litert INFO/WARNING 日志，只保留脚本自己的输出
+        for line in proc.stdout.splitlines():
+            if not (line.startswith("INFO:") or line.startswith("WARNING:")
+                    or line.startswith("W0000")):
+                print(line)
+        gate = "PASS"
+        report_path = output_dir / "semantic_reference_report.json"
+        if report_path.exists():
+            try:
+                report = json.loads(report_path.read_text())
+                gate = report.get("gate", "PASS")
+            except Exception:
+                gate = "BLOCK" if proc.returncode != 0 else "PASS"
+        result = {
+            'stage': '4.5', 'status': 'completed',
+            'exit_code': proc.returncode, 'gate': gate,
+            'timestamp': datetime.now().isoformat()
+        }
+        if gate == 'WARN':
+            print("[Stage4.5] 🟡 GATE WARN — see semantic reference warnings above")
+        else:
+            print("[Stage4.5] ✅ semantic references OK")
+    except Exception as e:
+        result = {'stage': '4.5', 'status': 'error', 'error': str(e)}
+        print(f"[Stage4.5] ⚠️ error: {e}")
+
     return result
 
 

@@ -8,17 +8,17 @@
 
 | 组件 | 路径 | 说明 |
 |---|---|---|
-| RSIHub mutate operator | `~/AI_for_Science/RSIHub/library/mutate/deepseek_lean.py` | DeepSeek v4-pro 诊断 + v4-flash 重写 Lean（有界） |
-| RSIHub 冻结评估器 | `~/AI_for_Science/RSIHub/library/evaluators/lean_eval.py` | MathCode 风格确定性评分 |
-| RSIHub 配方 | `~/AI_for_Science/RSIHub/recipes/lean_proof/evolve.yaml` | 完整 wiring（hillclimb + jsonl） |
+| RSIHub mutate operator | `~/workspace/RSIHub/library/mutate/deepseek_lean.py` | DeepSeek v4-pro 诊断 + v4-flash 重写 Lean（有界） |
+| RSIHub 冻结评估器 | `~/workspace/RSIHub/library/evaluators/lean_eval.py` | MathCode 风格确定性评分 |
+| RSIHub 配方 | `~/workspace/RSIHub/recipes/lean_proof/evolve.yaml` | 完整 wiring（hillclimb + jsonl） |
 | 桥接脚本 | `scripts/rsihub_lean_bridge.py`（本技能） | 零-Docker 驱动 RSIHub 循环 |
 | RSIHub 技能 | skill: `rsihub` | 框架用法 + 配方文档 |
 
 ## 调用方式（scientific-discovery-proof 启动时）
 
 ```bash
-cd ~/AI_for_Science/RSIHub
-.venv/bin/python ~/skills/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
+cd ~/workspace/RSIHub
+.venv/bin/python ~/.hermes/skills/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
     --lean /path/to/proof.lean \
     --generations 3 \
     --output /tmp/lean_evo \
@@ -59,5 +59,5 @@ score = 100 − 20·sorry − 15·admit − 10·(trivial+True_stub) − 30·comp
 ## 陷阱
 
 - `library` 是仓库根顶层包（非 `src/`），桥接脚本需 `sys.path` 同时加仓库根 + `src/`。
-- 桥接脚本必须用 RSIHub venv（3.12）运行：`cd ~/AI_for_Science/RSIHub && .venv/bin/python ...`。
+- 桥接脚本必须用 RSIHub venv（3.12）运行：`cd ~/workspace/RSIHub && .venv/bin/python ...`。
 - 完整 `evolve run` 配方仍需 harbor/local 评估 plumbing；桥接脚本是零-Docker 的等价路径。

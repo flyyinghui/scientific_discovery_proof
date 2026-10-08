@@ -63,6 +63,23 @@ def node_body(text: str, decls: list[dict], idx: int) -> str:
     return text[header_end:next_pos]
 
 
+def node_type_and_value(text: str, decls: list[dict], idx: int) -> tuple[str, str]:
+    """返回第 idx 个声明的 (type 部分, value 部分)。
+
+    type  = 声明头到 := 之前（签名 + 类型）—— 对应 prove2me 的 typeDeps（语句依赖）
+    value = := 之后到下一个声明头（证明体）   —— 对应 valueDeps（证明依赖）
+    axiom 无 :=，整个是 type（无 value）。
+    """
+    start = DECL_RE.search(text, decls[idx]["pos"])
+    header_end = start.end() if start else decls[idx]["pos"]
+    next_pos = decls[idx + 1]["pos"] if idx + 1 < len(decls) else len(text)
+    full = text[header_end:next_pos]
+    m = re.search(r":=", full)
+    if m:
+        return full[: m.end()], full[m.end():]
+    return full, ""
+
+
 def referenced_names(body: str, all_names: set[str]) -> set[str]:
     """返回 body 里引用的、且属于本文件声明的名字（整词匹配，排除自身由调用方处理）。"""
     found = set()
@@ -80,12 +97,16 @@ def build_dag(text: str) -> dict:
     nodes = []
     edges = []  # (from_name, to_name) —— from 被 to 引用
     for i, d in enumerate(decls):
-        node = {"index": i, "kind": d["kind"], "name": d["name"], "deps": []}
+        node = {"index": i, "kind": d["kind"], "name": d["name"], "deps": [],
+                "typeDeps": [], "valueDeps": []}
         if d["kind"] in PROOF_KW or d["kind"] in DEF_KW:
-            body = node_body(text, decls, i)
-            refs = referenced_names(body, all_names - {d["name"]})
-            node["deps"] = sorted(refs)
-            for ref in refs:
+            type_part, value_part = node_type_and_value(text, decls, i)
+            type_refs = referenced_names(type_part, all_names - {d["name"]})
+            value_refs = referenced_names(value_part, all_names - {d["name"]})
+            node["typeDeps"] = sorted(type_refs)
+            node["valueDeps"] = sorted(value_refs)
+            node["deps"] = sorted(type_refs | value_refs)
+            for ref in (type_refs | value_refs):
                 edges.append({"from": ref, "to": d["name"]})
         nodes.append(node)
     return {"nodes": nodes, "edges": edges, "name_to_idx": name_to_idx}
@@ -105,6 +126,18 @@ def audit(text: str) -> dict:
     redundant_lemmas = []   # 从未被下游引用的 lemma/theorem（排除最后一个 = 主结论）
     unused_axioms = []      # 从未被任何节点引用的 axiom
     dangling_refs = []      # 正文出现 _axiom/_lemma/_theorem/_def 但未声明
+    unverified_definition_deps = []  # 被定理陈述(typeDeps)引用但从未被证明(valueDeps)使用的 def
+
+    # typeDeps/valueDeps 反向引用统计（prove2me：语句依赖 vs 证明依赖）
+    type_referenced_by = {n["name"]: [] for n in nodes}
+    value_referenced_by = {n["name"]: [] for n in nodes}
+    for n in nodes:
+        for ref in n.get("typeDeps", []):
+            if ref in type_referenced_by:
+                type_referenced_by[ref].append(n["name"])
+        for ref in n.get("valueDeps", []):
+            if ref in value_referenced_by:
+                value_referenced_by[ref].append(n["name"])
 
     last_proof_idx = max(
         (i for i, n in enumerate(nodes) if n["kind"] in PROOF_KW), default=None
@@ -117,6 +150,19 @@ def audit(text: str) -> dict:
         elif n["kind"] in AXIOM_KW:
             if not referenced_by[n["name"]]:
                 unused_axioms.append({"name": n["name"]})
+
+    # 定义层未验证：被某个定理「陈述」(typeDeps) 引用，但从未被任何证明「使用」
+    # (valueDeps) —— 对应 prove2me 原则 7「定义优先」：定理建立在未验证的定义层上，
+    # 定义错了则所有用它陈述的定理全错。
+    for n in nodes:
+        if n["kind"] in DEF_KW:
+            typed = type_referenced_by.get(n["name"], [])
+            valued = value_referenced_by.get(n["name"], [])
+            if typed and not valued:
+                unverified_definition_deps.append({
+                    "name": n["name"], "kind": n["kind"],
+                    "typed_by": typed[:5],
+                })
 
     # 悬空引用：整个文件里出现 _axiom/_lemma/_theorem/_def 后缀名但不在声明表
     # [2026-09-03] 先剥离 attribute 标签 (@[...])，避免 @[honest_axiom] 等被误报为引用
@@ -136,6 +182,8 @@ def audit(text: str) -> dict:
         warns.append(f"{len(redundant_lemmas)} 个冗余引理（从未被下游使用）")
     if unused_axioms:
         warns.append(f"{len(unused_axioms)} 个未使用的 axiom")
+    if unverified_definition_deps:
+        warns.append(f"{len(unverified_definition_deps)} 个定义层未验证（被陈述引用但从未被证明使用）")
 
     gate = "BLOCK" if blocks else ("WARN" if warns else "PASS")
 
@@ -151,6 +199,7 @@ def audit(text: str) -> dict:
         "redundant_lemmas": redundant_lemmas,
         "unused_axioms": unused_axioms,
         "dangling_refs": dangling_refs,
+        "unverified_definition_deps": unverified_definition_deps,
         "blocks": blocks,
         "warns": warns,
         "nodes": [
