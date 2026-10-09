@@ -87,7 +87,7 @@ BootLoops 是一个**数值精确性 harness**，不是形式化证明器。它�
 ## 五、验证
 
 ```bash
-cd ~/.hermes/skills/scientific-discovery-proof/scripts
+cd ~/skills/scientific-discovery-proof/scripts
 python planted_truth_gate.py --self-test   # 6/6 对照 PASS
 python constant_certify.py --self-test      # 4/4 目标 CLOSED
 ```

@@ -25,7 +25,7 @@ from pathlib import Path
 from datetime import datetime
 
 # EmbeddingGemma-2 封装位置（可被环境变量覆盖）
-_EMBEDDING_MODULE_DIR = "~/models/embeddinggemma-2-740m"
+_EMBEDDING_MODULE_DIR = "~/projects/embeddinggemma-2-740m"
 
 # 语义相似度阈值：低于此值判为「疑似幻影引用」
 _DEFAULT_THRESHOLD = 0.40

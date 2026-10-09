@@ -8,10 +8,12 @@ V64 教训（2026-09-26 终审）：把物理对象直接定义为 S ≡ 谱底�
 则 bound 变成重言式（35x+b ≥ 35x+b），是替换非推导——4/5 代理一致 P0。
 检测信号：unfold 后定理体只剩 `rw [定义] + linarith`。
 
-三类检测：
+五类检测：
   1. 字面恒等重言式（conclusion 形如 X = X / X ≥ X / X ≤ X）      → BLOCK
   2. 定义重言式（rw/unfold 展开 conclusion 里的定义 + 无实质 tactic） → BLOCK
   3. 浅层证明（证明体无任何实质 tactic，如 calc/have/ring/exact）      → WARN
+  4. total function 默认值（log/sInf/iSup 无保护假设，v2.19.0 原则 3）→ WARN
+  5. vacuous 假设（False / P∧¬P / x<x 矛盾假设，v2.19.0 原则 5）       → WARN
 
 实质 tactic = calc / have / ring / ring_nf / field_simp / by_contra /
               induction / cases / exact <非rfl> / linarith [假设] / apply / refine
@@ -197,6 +199,55 @@ def _detect_definitional_tautology(conclusion: str, body: str) -> bool:
     return not _has_substantive(body)
 
 
+# ── Faithfulness 退化输入检测（v2.19.0, prove2me 原则 3/5）─────────
+
+TOTAL_FUNCTION_GUARDS = [
+    # (函数模式, 描述, 保护假设模式)
+    (r'\b(?:Real\.)?log\b', 'Real.log（非正输入返回默认值 0）', r'0\s*<|positive|\(h\w*\s*:?\s*0\s*<'),
+    (r'\bsInf\b', 'sInf（空集返回默认值 0）', r'nonempty|bddBelow|\(h\w*'),
+    (r'\biSup\b', 'iSup（空集/无界返回默认值）', r'nonempty|bddAbove|\(h\w*'),
+    (r'\biInf\b', 'iInf（空集/无界返回默认值）', r'nonempty|bddBelow|\(h\w*'),
+]
+
+
+def _detect_total_function_default(statement: str) -> str | None:
+    """原则 3：total function 坏输入默认值。
+
+    检测 statement 里出现 total function（log / sInf / iSup / iInf）但无对应保护
+    假设（正性 / 非空 / 有界）。Lean 里这些函数在坏输入上返回默认值（通常 0）
+    而非报错——若源材料的假设未显式化，形式化可能是错的（即使编译通过）。
+
+    返回描述字符串（触发则非 None），否则 None。启发式，WARN 而非 BLOCK。
+    """
+    if not statement:
+        return None
+    for pattern, desc, guard in TOTAL_FUNCTION_GUARDS:
+        if re.search(pattern, statement):
+            if not re.search(guard, statement):
+                return desc
+    return None
+
+
+def _detect_vacuous_hypothesis(statement: str) -> str | None:
+    """原则 5：边缘输入 vacuous——检测不可满足假设 / 自反矛盾。
+
+    三类：假设为 False、假设形如 P ∧ ¬P、自反严格不等式 x < x / x > x（矛盾）。
+    x ≤ x / x ≥ x 是恒真，不触发。
+
+    返回描述字符串（触发则非 None），否则 None。启发式，WARN 而非 BLOCK。
+    """
+    if not statement:
+        return None
+    if re.search(r':\s*False\b', statement):
+        return '假设为 False（不可满足）'
+    if re.search(r'∧\s*¬', statement):
+        return '假设形如 P ∧ ¬P（自相矛盾）'
+    for m in re.finditer(r'\(?\s*([A-Za-z_]\w*)\s*([<>])\s*\1\s*\)?', statement):
+        if m.group(2) in ('<', '>'):
+            return f'自反严格不等式 {m.group(1)} {m.group(2)} {m.group(1)}（矛盾）'
+    return None
+
+
 # ── 主审计 ───────────────────────────────────────────────────────
 
 def audit(lean: str) -> dict:
@@ -233,6 +284,24 @@ def audit(lean: str) -> dict:
                 "reason": f"证明体无任何实质 tactic（可能是平凡引理，需人工判断）：{conclusion[:60]}",
             })
 
+        # [v2.19.0] Faithfulness 退化输入检测（prove2me 原则 3/5）—— WARN 可叠加
+        tfd = _detect_total_function_default(b["statement"])
+        if tfd:
+            findings.append({
+                "type": "total_function_default",
+                "severity": "WARN",
+                "theorem": b["name"],
+                "reason": f"total function 坏输入默认值：{tfd}，statement 无对应保护假设（原则 3）。",
+            })
+        vac = _detect_vacuous_hypothesis(b["statement"])
+        if vac:
+            findings.append({
+                "type": "vacuous_hypothesis",
+                "severity": "WARN",
+                "theorem": b["name"],
+                "reason": f"vacuous/不可满足假设：{vac}（原则 5）。",
+            })
+
     blocks = [b for b in findings if b["severity"] == "BLOCK"]
     warns = [b for b in findings if b["severity"] == "WARN"]
     gate = "BLOCK" if blocks else ("WARN" if warns else "PASS")
@@ -243,6 +312,8 @@ def audit(lean: str) -> dict:
         "identity_tautologies": sum(1 for f in findings if f["type"] == "identity_tautology"),
         "definitional_tautologies": sum(1 for f in findings if f["type"] == "definitional_tautology"),
         "shallow_proofs": sum(1 for f in findings if f["type"] == "shallow_proof"),
+        "total_function_defaults": sum(1 for f in findings if f["type"] == "total_function_default"),
+        "vacuous_hypotheses": sum(1 for f in findings if f["type"] == "vacuous_hypothesis"),
     }
     return {"findings": findings, "stats": stats, "gate": gate}
 
@@ -271,6 +342,15 @@ theorem substantive : (a b : ℝ) → (a + b)^2 = a^2 + 2*a*b + b^2 := by
   intro a b
   calc
     (a + b)^2 = a^2 + 2*a*b + b^2 := by ring
+
+-- ⑤ total function 默认值（WARN）：Real.log 无 x > 0 保护假设（原则 3）
+theorem log_unprotected (x : ℝ) : Real.log x = 0 := by
+  have h : Real.log x = 0 := by simp [Real.log]
+  exact h
+
+-- ⑥ vacuous 假设（WARN）：假设 False 不可满足（原则 5）
+theorem vacuous_false (h : False) : 1 = 2 := by
+  cases h
 """
 
 
@@ -281,6 +361,8 @@ def _self_test() -> int:
     print(f"  identity_tautologies={stats['identity_tautologies']}（期望 1）")
     print(f"  definitional_tautologies={stats['definitional_tautologies']}（期望 1）")
     print(f"  shallow_proofs={stats['shallow_proofs']}（期望 1）")
+    print(f"  total_function_defaults={stats['total_function_defaults']}（期望 1）")
+    print(f"  vacuous_hypotheses={stats['vacuous_hypotheses']}（期望 1）")
     print(f"  gate={report['gate']}（期望 BLOCK）")
     for f in report["findings"]:
         print(f"    [{f['severity']}] {f['theorem']}: {f['reason'][:70]}")
@@ -288,6 +370,8 @@ def _self_test() -> int:
     assert stats["identity_tautologies"] == 1, "字面恒等检测失败"
     assert stats["definitional_tautologies"] == 1, "定义重言式检测失败"
     assert stats["shallow_proofs"] == 1, "浅层证明检测失败"
+    assert stats["total_function_defaults"] == 1, "total function 默认值检测失败"
+    assert stats["vacuous_hypotheses"] == 1, "vacuous 假设检测失败"
     assert report["gate"] == "BLOCK", "门控应为 BLOCK"
     # 实质定理不应被误报
     assert not any(f["theorem"] == "substantive" for f in report["findings"]), "实质定理被误报"
@@ -320,6 +404,8 @@ def main() -> int:
     print(f"  定义重言式 (BLOCK): {report['stats']['definitional_tautologies']}")
     print(f"  字面恒等 (BLOCK): {report['stats']['identity_tautologies']}")
     print(f"  浅层证明 (WARN): {report['stats']['shallow_proofs']}")
+    print(f"  total function 默认值 (WARN): {report['stats']['total_function_defaults']}")
+    print(f"  vacuous 假设 (WARN): {report['stats']['vacuous_hypotheses']}")
     for f in report["findings"]:
         mark = "🔴" if f["severity"] == "BLOCK" else "🟡"
         print(f"    {mark} [{f['type']}] {f['theorem']}: {f['reason'][:80]}")

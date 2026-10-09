@@ -38,7 +38,7 @@ from paperqa import Settings, ask
 
 answer = ask(
     "Does the paper by Davidson & Ibarra (2002) support the bound M_R ≈ 10^14 GeV?",
-    settings=Settings(paper_directory="/mnt/h/中国数据/papers"),
+    settings=Settings(paper_directory="<data>/papers"),
 )
 # answer.formatted_answer  # 带引用的答案（精确到 pages）
 # answer.context           # 证据段落摘要
@@ -113,18 +113,18 @@ Stage 3.5 引用核查（升级后）：
 
 ```bash
 # 1. 独立 venv（Python 3.11+）
-/usr/local/lib/hermes-agent-v14/venv/bin/python -m venv ~/tools/PaperQA/.venv
-~/tools/PaperQA/.venv/bin/pip install "paper-qa>=5" litellm sentence-transformers
+/usr/local/lib/hermes-agent-v14/venv/bin/python -m venv ~/projects/PaperQA/.venv
+~/projects/PaperQA/.venv/bin/pip install "paper-qa>=5" litellm sentence-transformers
 
 # 2. DeepSeek LLM（LiteLLM）
-export DEEPSEEK_API_KEY=...   # 从 ~/.hermes/.env 读
+export DEEPSEEK_API_KEY=...   # 从 ~/projects/.env 读
 
 # 3. 配置（paperqa Settings）
 from paperqa import Settings
 settings = Settings(
     llm="deepseek/deepseek-flash",           # LiteLLM 模型名
     embedding="sentence-transformers/...",   # 本地 embedding（DeepSeek 无 embedding API）
-    paper_directory="/mnt/h/中国数据/papers", # 本地文献库
+    paper_directory="<data>/papers", # 本地文献库
 )
 ```
 
@@ -149,7 +149,7 @@ Stage 3.5 内部：
   → 门控：任一 BLOCK → Stage 4 不启动
 ```
 
-**回滚**：外部核查脚本独立，不侵入现有脚本；移除即回到内部核对版本。PaperQA2 依赖装在独立 venv（~/tools/PaperQA/.venv），不污染 Hermes venv。
+**回滚**：外部核查脚本独立，不侵入现有脚本；移除即回到内部核对版本。PaperQA2 依赖装在独立 venv（~/projects/PaperQA/.venv），不污染 Hermes venv。
 
 ---
 

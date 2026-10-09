@@ -137,7 +137,7 @@ pipeline.run({})
 
 | 文件 | 路径 |
 |------|------|
-| MAF框架 | `~\workspace\math-agent-framework\` |
+| MAF框架 | `<project>\math-agent-framework\` |
 | 桥接模块 | `maf_bridge.py` (MAF根目录) |
 | SDP技能 | `~/.hermes/skills/scientific-discovery-proof/` |
 | SciExplorer | `sciexplorer/` (zip解压) |

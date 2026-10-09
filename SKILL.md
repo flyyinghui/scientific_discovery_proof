@@ -8,8 +8,8 @@ description: >-
   70% time reduction vs standalone PPE. NEW v2.3: Stage −1 dual-use safety gateway,
   Stage 3.5 Hallucination Clipping (numeric claim ↔ Lean cross-reference + joint
   reliability objective), Stage 2 UCB exploration bonus, Stage 3 three-phase scaffolding.
-version: 2.18.0
-tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding, rsiagent, curriculum, exploration, planted-truth, constant-certification, bootloops]
+version: 2.19.0
+tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding, rsiagent, curriculum, exploration, planted-truth, constant-certification, bootloops, faithfulness, disproof, target-strength, anti-trivialization, total-function-default, vacuous-hypothesis, scout]
 related_skills:
   - math-agent-framework (MAF stage 0)
   - SciExplorer (stage 1)
@@ -21,6 +21,24 @@ related_skills:
 # Scientific Discovery & Proof — Integrated Pipeline v2.15
 
 Five-stage end-to-end pipeline for physics conjecture discovery → formal verification → publication.
+
+**NEW in v2.19.0** (from prove2me 二次评估，2026-10-08): **形式化忠实性前置规范 + 反证分支 + 退化输入检测**。
+深读 prove2me_workspace 全库（SKILL.md + 13 reference + 2 Lean 脚本），在 v2.18.0 已落地的 5 项
+（read-back / faithfulness 5 约束 / typeDeps·valueDeps / reduction 复用 / milestone）之外，落地 4 项新增量，
+**不动主线五阶段**：
+① **P0 Target 强度分层 + 平凡化排除前置声明**（新 `scripts/conjecture_spec_check.py` + `_generate_proof_skeleton`
+注入）——把 V64 教训从「事后检测」前移到「猜想定义时的前置声明」：目标应为最弱稳定陈述（真相形状）而非
+硬编码常数，且一句话排除 vacuous hypothesis / trivial-true definition / hard-coded special case。
+② **P1 Faithfulness 退化输入检测**（`physical_content_audit.py` 新增 2 检测）——原则 3「total function 坏输入
+默认值」（log/sInf/iSup 无保护假设）+ 原则 5「vacuous/不可满足假设」（False / P∧¬P / x<x）。均为 WARN（启发式）。
+③ **P1 Disproof 反证分支**（新 `scripts/disproof_probe.py`，Stage 2.6 旁路）——prove2me 三种移动之一，
+Stage 2 后主动尝试证明猜想否定，disproved/possibly_false → WARN 提示猜想可能为假。
+④ **P2 Scout 失败路径侦察**（`stage36_evolution.py` 的 failed_approach 加 rejected_by/reject_reason）——
+权威拒绝方 + 理由，比「自己失败」更硬的信号。
+完整评估见 `references/prove2me-second-assessment.md`。
+
+诚实边界：①②是「前置声明」规范（不产生形式化保证，实质平凡化仍由 physical_content_audit 兜底）；
+③反证是 LLM 启发式（不是形式化保证，真正阻断靠 Stage 3.5 审计）；④是流程增强（不产生新 BLOCK 门控）。
 
 **NEW in v2.15.0** (from V64 定义重言式教训，2026-10-05): **物理内容审计门控**。
 新增 `scripts/physical_content_audit.py`（stdlib-only），把「0 sorry / 0 axiom 编译通过」与「物理内容非平凡」区分开。
@@ -357,13 +375,13 @@ python constant_certify.py --target NAME --value X --ring "pi**2" "1" --height 1
 
 # Stage 3.6b — 接入 RSIHub（正式集成，2026-09-04）
 # 用 RSIHub 真实 operator 类 + 冻结评估器 + archive.jsonl 做 Lean 证据链自我进化
-cd ~/workspace/RSIHub
-.venv/bin/python ~/.hermes/skills/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
+cd ~/projects/RSIHub
+.venv/bin/python ~/skills/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
   --lean /path/to/proof.lean --generations 3 --output /tmp/lean_evo [--dry-run]
 # 详见 references/rsihub-lean-bridge.md + skill: rsihub
 
 # MAF bridge standalone
-cd ~/workspace/math-agent-framework
+cd ~/projects/math-agent-framework
 python maf_bridge.py
 ```
 

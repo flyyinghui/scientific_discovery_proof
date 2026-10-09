@@ -352,9 +352,9 @@ def optimize(archive_path: Path, output_dir: Path, rounds: int, n_candidates: in
 
 def _load_api_key() -> str:
     for env_path in [
-        "~/.hermes/.env",
+        ".env",
         str(Path.home() / ".hermes/.env"),
-        "~/.hermes/.env",
+        ".env",
     ]:
         p = Path(env_path)
         if p.exists():

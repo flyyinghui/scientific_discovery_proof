@@ -19,7 +19,7 @@ from datetime import datetime
 # ── Configuration ────────────────────────────────────────────
 
 PIPELINE_ROOT = Path(__file__).resolve().parent.parent
-PROJECT_ROOT = Path("~/workspace")
+PROJECT_ROOT = Path.home() / "projects"
 
 STAGE_SCRIPTS = {
     1: {  # SciExplorer
@@ -824,7 +824,7 @@ def _run_stage45_semantic_reference(paper_path: Path, output_dir: Path) -> dict:
 def _load_api_key() -> str:
     """Load DeepSeek API key."""
     for env_path in [
-        '~/.hermes/.env',
+        '.env',
         os.path.expanduser('~/.hermes/.env'),
     ]:
         if os.path.exists(env_path):
@@ -843,6 +843,9 @@ def _generate_proof_skeleton(conjecture_path: Path) -> str:
     name = c.get('name', 'Unknown').replace(' ', '_')
     axioms = c.get('axioms', [])
     
+    target_strength = c.get('target_strength', '(未声明)')
+    anti_triv = c.get('anti_trivialization', '(未声明)')
+
     lines = [
         f"import Mathlib",
         f"",
@@ -851,6 +854,9 @@ def _generate_proof_skeleton(conjecture_path: Path) -> str:
         f"",
         f"Auto-generated proof skeleton by Scientific Discovery Pipeline",
         f"Timestamp: {datetime.now().isoformat()}",
+        f"",
+        f"Target strength: {target_strength}  (weakest_stable = 最弱稳定陈述; hardcoded_constant = 硬编码常数)",
+        f"Anti-trivialization: {anti_triv}",
         f"-/",
         f"",
         f"open Real",
@@ -876,6 +882,70 @@ def _generate_proof_skeleton(conjecture_path: Path) -> str:
     return '\n'.join(lines)
 
 
+def run_conjecture_spec_check(conjecture_path: Path, output_dir: Path) -> dict:
+    """Stage 0 前：猜想 JSON 前置规范检查（v2.19.0, prove2me P0-①②）。
+
+    Target 强度分层 + 平凡化排除声明。WARN 不阻断（前置提示），
+    实质平凡化检测由 Stage 3.5b physical_content_audit.py 兜底。
+    """
+    spec_script = Path(__file__).parent / "conjecture_spec_check.py"
+    print(f"\n[Stage0-pre] 猜想前置规范检查: {conjecture_path.name}")
+    try:
+        proc = subprocess.run(
+            [VENV_PYTHON, str(spec_script), "--conjecture", str(conjecture_path),
+             "--output", str(output_dir / "conjecture_spec_check.json")],
+            capture_output=True, text=True, timeout=120,
+        )
+        for line in proc.stdout.split("\n"):
+            if line.strip():
+                print(f"  {line}")
+        return {
+            "stage": "spec_check",
+            "status": "completed" if proc.returncode == 0 else "failed",
+            "exit_code": proc.returncode,
+            "report": str(output_dir / "conjecture_spec_check.json"),
+        }
+    except Exception as e:
+        print(f"  ⚠️ 前置检查失败（不阻断）: {e}")
+        return {"stage": "spec_check", "status": "error", "error": str(e)}
+
+
+def run_stage26_disproof_probe(conjecture_path: Path, output_dir: Path) -> dict:
+    """Stage 2.6：反证探测（v2.19.0, prove2me Disproof 移动）。
+
+    Stage 2 排名后、Stage 3 证明前，主动尝试证明猜想的否定。
+    WARN = 猜想可能为假（建议审视）；PASS = 未发现反例。
+    不硬阻断——反证是 LLM 启发式，实质阻断靠 Stage 3.5 审计。
+    """
+    probe_script = Path(__file__).parent / "disproof_probe.py"
+    print(f"\n[Stage2.6] 反证探测: {conjecture_path.name}")
+    try:
+        proc = subprocess.run(
+            [VENV_PYTHON, str(probe_script), "--conjecture", str(conjecture_path),
+             "--output", str(output_dir / "disproof_probe.json")],
+            capture_output=True, text=True, timeout=300,
+        )
+        for line in proc.stdout.split("\n"):
+            if line.strip():
+                print(f"  {line}")
+        report_path = output_dir / "disproof_probe.json"
+        gate = "PASS"
+        if report_path.exists():
+            try:
+                gate = json.loads(report_path.read_text(encoding="utf-8")).get("gate", "PASS")
+            except Exception:
+                pass
+        return {
+            "stage": "2.6",
+            "status": "completed" if proc.returncode == 0 else "failed",
+            "gate": gate,
+            "report": str(report_path),
+        }
+    except Exception as e:
+        print(f"  ⚠️ 反证探测失败（不阻断）: {e}")
+        return {"stage": "2.6", "status": "error", "error": str(e), "gate": "PASS"}
+
+
 # ── Main ─────────────────────────────────────────────────────
 
 def main():
@@ -897,8 +967,8 @@ def main():
     stages = []
     for s in args.stages.split(','):
         s = s.strip()
-        if s in ('2.5', '3.5c', '3.6', '3.6d'):
-            stages.append(s)  # 2.5（课程规划）/ 3.5c（DAG 审计）/ 3.6（进化）/ 3.6d（深挖）独立阶段
+        if s in ('2.5', '2.6', '3.5c', '3.6', '3.6d'):
+            stages.append(s)  # 2.5（课程规划）/ 2.6（反证探测）/ 3.5c（DAG 审计）/ 3.6（进化）/ 3.6d（深挖）独立阶段
         else:
             stages.append(int(s))
     
@@ -911,7 +981,11 @@ def main():
     
     start_time = time.time()
     results = {}
-    
+
+    # [v2.19.0] 猜想 JSON 前置规范检查（prove2me P0-①②）：Target 强度分层 + 平凡化排除。
+    # WARN 不阻断（前置提示），实质检测由 Stage 3.5b physical_content_audit 兜底。
+    results['spec_check'] = run_conjecture_spec_check(conjecture_path, output_dir)
+
     for stage_num in stages:
         stage_info = STAGE_SCRIPTS.get(stage_num, {})
         print(f"\n▶ Stage {stage_num}: {stage_info.get('name', 'Unknown')}")
@@ -927,6 +1001,9 @@ def main():
         
         elif stage_num == '2.5':
             results['2.5'] = run_stage25_curriculum(conjecture_path, results.get(2, {}), output_dir)
+        
+        elif stage_num == '2.6':
+            results['2.6'] = run_stage26_disproof_probe(conjecture_path, output_dir)
         
         elif stage_num == 3:
             results[3] = run_stage3_ppe(conjecture_path, results.get(2, {}), output_dir)

@@ -98,7 +98,7 @@ Stage 4   AI-Scientist V2（论文生成）
 ### 4.1 独立使用
 
 ```bash
-cd ~/.hermes/skills/scientific-discovery-proof/scripts
+cd ~/skills/scientific-discovery-proof/scripts
 python proof_consistency_audit.py \
   --lean /path/to/proof.lean \
   --paper /path/to/paper.txt \      # 可选，用于检测定理虚假声称
@@ -118,7 +118,7 @@ python pipeline_orchestrator.py \
 ### 4.3 PPE 内（Phase 3.5 自动触发）
 
 ```bash
-cd ~/workspace/physics_proof_engine
+cd ~/projects/physics_proof_engine
 python prove_with_skills.py --target T1 --iterations 20
 # Phase 3 验证后自动触发 Phase 3.5 审计，扫描 projects/ 下最近 5 个 .lean
 ```

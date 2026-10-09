@@ -174,7 +174,7 @@ def _diagnose_stall(stall_counter: int, current: dict, replay: ReplaySimulator,
 
 def _load_api_key() -> str:
     for env_path in [
-        "~/.hermes/.env",
+        ".env",
         str(Path.home() / ".hermes/.env"),
     ]:
         p = Path(env_path)
@@ -392,6 +392,11 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
                         "retry with a different lemma decomposition, strengthened "
                         "hypothesis, or alternative axiom instantiation"
                     ),
+                    # [v2.19.0] Scout 失败路径侦察（prove2me mission_solver §2）：
+                    # 权威拒绝方 + 理由，比「自己失败」更硬的信号。archive 注入时
+                    # 优先检索「权威拒绝」路径，避免重试已被拒绝的方法。
+                    "rejected_by": "frozen_evaluator",
+                    "reject_reason": _defect_summary(candidate["defects"]),
                 }
             append(record)
             replay.records.append(record)  # 即时更新重放池

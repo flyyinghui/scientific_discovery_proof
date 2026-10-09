@@ -30,7 +30,7 @@ from datetime import datetime
 
 def _load_api_key() -> str:
     for env_path in [
-        '~/.hermes/.env',
+        '.env',
         os.path.expanduser('~/.hermes/.env'),
     ]:
         if os.path.exists(env_path):
