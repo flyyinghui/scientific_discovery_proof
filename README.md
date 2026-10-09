@@ -136,8 +136,3 @@ See `references/` for per-framework integration notes and pitfalls.
 ## License
 
 Apache-2.0
-**v2.15.0** — physical-content audit gate (definitional-tautology detection) integrated into Stage 3.5b.
-
-## License
-
-Apache-2.0
