@@ -19,7 +19,7 @@ from datetime import datetime
 # ── Configuration ────────────────────────────────────────────
 
 PIPELINE_ROOT = Path(__file__).resolve().parent.parent
-PROJECT_ROOT = Path.home() / "projects"
+PROJECT_ROOT = Path("~/projects/ai_for_science")
 
 STAGE_SCRIPTS = {
     1: {  # SciExplorer
@@ -69,7 +69,64 @@ VENV_PYTHON = "/usr/local/lib/hermes-agent-v14/venv/bin/python"
 
 # ── Stage Implementations ────────────────────────────────────
 
-def run_stage1_sciexplorer(conjecture_path: Path, output_dir: Path) -> dict:
+def run_jspace_grounding(conjecture_path: Path, output_dir: Path, skip_brain: bool = False) -> dict:
+    """J-space 桥接（v2.22.0，落地 P0-①/②）：用大脑真实语义检索动态重算 J-score。
+
+    替代 references/jspace-bridge-matrix.md 的硬编码 12×12 快照 + Stage 1 的
+    j_score_hint 占位符。大脑加载昂贵（181K 神经元 ~35-170s），以**一次性子进程**
+    运行（加载一次 → 算全部概念 J-score → 退出）。无 brain / --skip-brain 时优雅
+    降级（J-score 是「先验支持度」信号，非硬门控——硬门控由 Stage 3.5 审计负责）。
+    """
+    print("\n" + "=" * 60)
+    print("STAGE J-space: Brain Bridge Grounding (dynamic J-score)")
+    print("=" * 60)
+
+    jspace_script = Path(__file__).resolve().parent / "jspace_bridge.py"
+    jspace_path = output_dir / "stage_jspace.json"
+
+    if skip_brain:
+        result = {'stage': 'jspace', 'status': 'skipped', 'reason': '--skip-brain'}
+        jspace_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+        print("[Jspace] 已跳过（--skip-brain）")
+        return result
+
+    if not jspace_script.exists():
+        result = {'stage': 'jspace', 'status': 'skipped', 'reason': 'jspace_bridge.py not found'}
+        print("[Jspace] ⚠️ jspace_bridge.py not found — skipping")
+        return result
+
+    cmd = [VENV_PYTHON, str(jspace_script), "--conjecture", str(conjecture_path),
+           "--output", str(jspace_path)]
+    print(f"[Jspace] Computing dynamic J-score for {conjecture_path.name}...")
+    print("         （加载 181K 神经元大脑 ~35-170s，仅此一次）")
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        if jspace_path.exists():
+            data = json.loads(jspace_path.read_text(encoding='utf-8'))
+            result = {
+                'stage': 'jspace', 'status': 'completed',
+                'path_j_score': data.get('path_j_score'),
+                'path_decision': data.get('path_decision'),
+                'n_concepts': data.get('n_concepts'),
+                'per_concept_j_score': data.get('per_concept_j_score'),
+                'calibration': data.get('calibration'),
+                'output_path': str(jspace_path),
+            }
+            print(f"[Jspace] path_j_score={data.get('path_j_score')}  "
+                  f"decision={data.get('path_decision')}")
+            return result
+        else:
+            print(f"[Jspace] ⚠️ 无输出（exit={proc.returncode}）: {proc.stderr[-300:]}")
+            return {'stage': 'jspace', 'status': 'failed', 'error': proc.stderr[-300:]}
+    except subprocess.TimeoutExpired:
+        print("[Jspace] ⚠️ Timeout after 600s（大脑加载超时）")
+        return {'stage': 'jspace', 'status': 'timeout', 'error': 'brain load > 600s'}
+    except Exception as e:
+        print(f"[Jspace] ⚠️ 降级: {e}")
+        return {'stage': 'jspace', 'status': 'error', 'error': str(e)}
+
+
+def run_stage1_sciexplorer(conjecture_path: Path, output_dir: Path, jspace: dict = None) -> dict:
     """Stage 1: SciExplorer numerical pre-validation."""
     print("\n" + "="*60)
     print("STAGE 1: SciExplorer — Numerical Discovery & Pre-Filtering")
@@ -113,11 +170,17 @@ def run_stage1_sciexplorer(conjecture_path: Path, output_dir: Path) -> dict:
             print(f"  [FAIL-FATAL] {claim_id}: {desc[:80]}")
         else:
             result['passed_claims'] += 1
+            # [v2.22.0] J-space 真实 J-score 替代占位符：优先用大脑桥接的 path_j_score，
+            # 无 jspace（降级/跳过）时回退到旧启发式占位符。
+            if jspace and jspace.get('path_j_score') is not None:
+                j_hint = jspace['path_j_score']
+            else:
+                j_hint = 0.5 + 0.3 * (result['passed_claims'] / max(1, len(claims)))
             result['validated_candidates'].append({
                 'id': claim_id,
                 'description': desc,
                 'status': 'passed',
-                'j_score_hint': 0.5 + 0.3 * (result['passed_claims'] / max(1, len(claims)))
+                'j_score_hint': round(j_hint, 4),
             })
             print(f"  [PASS] {claim_id}: {desc[:80]}")
     
@@ -824,7 +887,7 @@ def _run_stage45_semantic_reference(paper_path: Path, output_dir: Path) -> dict:
 def _load_api_key() -> str:
     """Load DeepSeek API key."""
     for env_path in [
-        '.env',
+        '~/.hermes/.env',
         os.path.expanduser('~/.hermes/.env'),
     ]:
         if os.path.exists(env_path):
@@ -955,6 +1018,7 @@ def main():
     parser.add_argument('--stages', default='1,2,3,4', help='Stages to run (comma-separated: 1,2,3,3.5c,3.6,4; Stage 3 auto-includes 3.5+3.5b+3.5c audits)')
     parser.add_argument('--deepseek-key', help='DeepSeek API key (or set DEEPSEEK_API_KEY)')
     parser.add_argument('--evo-generations', type=int, default=3, help='Stage 3.6 evolution generations (default 3)')
+    parser.add_argument('--skip-brain', action='store_true', help='Skip J-space brain grounding (dynamic J-score, v2.22.0)')
     args = parser.parse_args()
     
     if args.deepseek_key:
@@ -986,12 +1050,16 @@ def main():
     # WARN 不阻断（前置提示），实质检测由 Stage 3.5b physical_content_audit 兜底。
     results['spec_check'] = run_conjecture_spec_check(conjecture_path, output_dir)
 
+    # [v2.22.0] J-space 桥接（大脑动态 J-score）：替代硬编码矩阵 + j_score_hint 占位符。
+    # 一次性子进程（加载 181K 神经元一次），输出 path_j_score 供 Stage 1/3.6 世界模型用。
+    results['jspace'] = run_jspace_grounding(conjecture_path, output_dir, skip_brain=args.skip_brain)
+
     for stage_num in stages:
         stage_info = STAGE_SCRIPTS.get(stage_num, {})
         print(f"\n▶ Stage {stage_num}: {stage_info.get('name', 'Unknown')}")
         
         if stage_num == 1:
-            results[1] = run_stage1_sciexplorer(conjecture_path, output_dir)
+            results[1] = run_stage1_sciexplorer(conjecture_path, output_dir, jspace=results.get('jspace', {}))
             if results[1].get('gate_decision') == 'BLOCKED':
                 print("\n⚠️ Stage 1 gate BLOCKED — stopping pipeline")
                 break

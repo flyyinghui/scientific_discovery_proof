@@ -23,8 +23,14 @@ RSIAgent 复审增量（2026-10-05，代码深读新增）：
   P0-③ learn_on_pass : 分数不退化（≥）也记录为「成功经验」，供 replay 学习「不退化」先例。
   P5  证明模式模板库 : 从 proof_templates.json 检索已冻结证明模式，注入 mutate prompt 作 few-shot。
 
-循环：select(父代) → replay 选策略 → analyze(DeepSeek 诊断 + 盲区提示) →
-      mutate(DeepSeek 按策略修复) → gate(严格改进才接受) → record(archive.jsonl 带策略)
+JANUS 增量（2026-10-12，arXiv:2610.13194，中科院计算所 Predict-Verify-Evolve）：
+  P0-① 世界模型（预执行预测） : 变异前用历史统计预测 (strategy × condition) 的期望增益
+        + 0-sorry 概率，PRUNE 无望变异省成本（world_model_prescreen.py 的 WorldModel）。
+  P0-② 三标准评分 : 价值 + 信息增益（盲区占比 + 新 condition）+ 探索效用（UCB），
+        记入 archive record（three_criteria 字段），补 Stage 3.6 缺的探索项。
+
+循环：select(父代) → replay 选策略 → world model 预筛选 → analyze(DeepSeek 诊断 + 盲区提示) →
+      mutate(DeepSeek 按策略修复) → gate(严格改进才接受) → record(archive.jsonl 带策略 + 三标准)
 
 用法：
   python stage36_evolution.py \
@@ -50,6 +56,7 @@ from pathlib import Path
 
 from replay_strategies import ReplaySimulator, MUTATION_STRATEGIES, DEFECT_PRIORITY, defect_signature
 from proof_template_library import load_templates, select_templates, render_few_shot
+from world_model_prescreen import WorldModel, three_criteria_score
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 VENV_PYTHON = "/usr/local/lib/hermes-agent-v14/venv/bin/python"
@@ -72,6 +79,31 @@ def _run_dag_audit(lean_path: Path, output_dir: Path) -> dict | None:
     except Exception:
         pass
     return None
+
+
+def _run_content_audit(lean_path: Path, output_dir: Path) -> int:
+    """P1-③ (AIDE²/RSI, 2026-10-12): 隐藏评分——物理内容审计 BLOCK 数。
+
+    AIDE² 教训：外层循环用内层看不到的**隐藏分数**选择，防止 reward-hacking
+    （AIDE² 借此把 reward-hacking 率从 63% 降到 34%）。这里的隐藏标准是
+    `physical_content_audit.py` 的 BLOCK 数（字面恒等重言式 + 定义重言式）——
+    编译 0 sorry 的「可见分数」之外，物理内容非平凡才是隐藏门槛。
+    """
+    audit_script = SCRIPTS_DIR / "physical_content_audit.py"
+    if not audit_script.exists():
+        return 0
+    out = output_dir / "content_audit_tmp.json"
+    try:
+        subprocess.run(
+            [VENV_PYTHON, str(audit_script), "--lean", str(lean_path), "--output", str(out)],
+            capture_output=True, text=True, timeout=120,
+        )
+        if out.exists():
+            data = json.loads(out.read_text(encoding="utf-8"))
+            return data.get("stats", {}).get("blocks", 0)
+    except Exception:
+        pass
+    return 0
 
 
 def evaluate_lean(lean_text: str, dag_report: dict | None) -> dict:
@@ -101,6 +133,43 @@ def evaluate_lean(lean_text: str, dag_report: dict | None) -> dict:
     score -= 50 * dangling
     score = max(0.0, score)
     return {"score": round(score, 1), "defects": defects}
+
+
+# ── P0-① (AIDE²/RSI, 2026-10-12) RSI 等级评估 ────────────────────
+
+def assess_rsi_level(seed_score: float, best_score: float, n_generations: int,
+                     n_accepted: int, n_total: int) -> dict:
+    """AIDE² 四级 RSI 阶梯评估（诚实标注进化循环处于哪个等级）。
+
+    Level 0 delegation   : 无净正增益（进化不比人类手调更好）。
+    Level 1 net-positive : 产生净正改进（比人类手调更高效）。
+    Level 2 ignition     : 改进自身改进能力（需 ignition_test.py 独立诊断）。
+    Level 3 inflection   : 改进复合快于问题变难（智能爆炸，本框架不声称）。
+
+    诚实边界：本函数只区分 Level 0 / Level 1；Level 2 由 ignition_test.py 诊断，
+    Level 3 永不声称（AIDE² 也明确否认达到拐点，点火测试不明确）。
+    """
+    gain = best_score - seed_score
+    acceptance_rate = (n_accepted / n_total) if n_total > 0 else 0.0
+    if n_generations == 0:
+        level, label = 0, "delegation (no evolution run)"
+    elif gain <= 0:
+        level, label = 0, "delegation (no net-positive gain)"
+    else:
+        level, label = 1, "net-positive (beats the seed/hand-tuning baseline)"
+    return {
+        "rsi_level": level,
+        "rsi_label": label,
+        "seed_score": seed_score,
+        "best_score": best_score,
+        "gain": round(gain, 1),
+        "n_generations": n_generations,
+        "n_accepted": n_accepted,
+        "n_total": n_total,
+        "acceptance_rate": round(acceptance_rate, 3),
+        "ignition": "inconclusive — run ignition_test.py for a Level-2 diagnostic",
+        "inflection": False,
+    }
 
 
 # ── P0-② 密封评估器 + 防 reward hack ────────────────────────────
@@ -174,7 +243,7 @@ def _diagnose_stall(stall_counter: int, current: dict, replay: ReplaySimulator,
 
 def _load_api_key() -> str:
     for env_path in [
-        ".env",
+        "~/.hermes/.env",
         str(Path.home() / ".hermes/.env"),
     ]:
         p = Path(env_path)
@@ -276,7 +345,7 @@ def _mutate(client, lean_text: str, repair_plan: str, strat_name: str, few_shot:
 # ── 进化循环 ─────────────────────────────────────────────────────
 
 def run_evolution(lean_path: Path, output_dir: Path, generations: int,
-                  dry_run: bool, epsilon: float = 0.15) -> dict:
+                  dry_run: bool, epsilon: float = 0.15, j_score: float | None = None) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     archive_path = output_dir / "archive.jsonl"
     best_lean_path = output_dir / "best_proof.lean"
@@ -285,12 +354,18 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
     current_text = seed_text
     dag_report = _run_dag_audit(lean_path, output_dir)
     current = evaluate_lean(current_text, dag_report)
+    seed_score = current["score"]   # P0-① (AIDE²/RSI): 保存种子分数供 RSI 等级评估
 
     # P0: 初始化 ReplaySimulator（读历史 archive，跨运行累计策略统计）
     replay = ReplaySimulator(archive_path)
     n_hist = replay.load(archive_path)
     if n_hist:
         print(f"[Stage3.6] 载入历史证据 {n_hist} 条 → replay simulator 就绪")
+
+    # P0-① (JANUS, 2026-10-12): 世界模型（预执行预测器）
+    # 在昂贵的 LLM 变异 + 编译之前，用历史统计预筛选 (strategy × condition) 变异。
+    # 诚实边界：世界模型是预筛选器，不替代冻结评估器——PRUNE 只省成本，幸存者仍走冻结评估器。
+    world_model = WorldModel(replay)
 
     archive = []
     client = None
@@ -348,6 +423,30 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
             if stall_diagnosis:
                 print(f"          🧭 停滞诊断: {stall_diagnosis}")
 
+            # P0-① (JANUS): 世界模型预执行预测——在 LLM 变异 + 编译前预筛选。
+            # 诚实边界：PRUNE 只跳过这次昂贵的 LLM+编译（省成本），不替代冻结评估器。
+            # [v2.22.0] J-space 先验：大脑强支持（j_score ≥ 阈值）→ 保护候选不被历史剪枝。
+            prediction = world_model.predict(current["defects"], strat_name, j_score=j_score)
+            if prediction["verdict"] == "PRUNE":
+                print(f"          🔮 世界模型剪枝: {strat_name}×{prediction['condition']} "
+                      f"预测增益 {prediction['predicted_gain']}、0-sorry 概率 "
+                      f"{prediction['zero_sorry_prob']} → 跳过 LLM 变异 + 编译")
+                append({
+                    "generation": gen, "score": current["score"],
+                    "defects": current["defects"], "accepted": False,
+                    "learn_on_pass": False, "parent_score": current["score"],
+                    "gain": 0.0, "mutation_strategy": strat_name,
+                    "defects_before": current["defects"],
+                    "condition": defect_signature(current["defects"]),
+                    "world_model_pruned": True,
+                    "prediction": prediction,
+                    "timestamp": datetime.now().isoformat(),
+                })
+                stall_counter += 1
+                continue
+            print(f"          🔮 世界模型预测: 增益 {prediction['predicted_gain']}、"
+                  f"0-sorry 概率 {prediction['zero_sorry_prob']} → KEEP")
+
             repair_plan = _analyze(client, current_text, current["defects"], strat_name,
                                    blinds, precedents, stall_diagnosis)
             print(f"[Gen {gen}] 修复中...")
@@ -363,9 +462,18 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
 
             # P0-② 密封评估器 + 防 reward hack：等价替换即拒绝（即使分数提高）
             hack = _detect_reward_hack(current["defects"], candidate["defects"])
-            accepted = (candidate["score"] > current["score"]) and (hack is None)
-            # P0-③ learn_on_pass：分数不退化（≥）且无 hack 也记录为「成功经验」（不替换当前）
-            learn_on_pass = (candidate["score"] >= current["score"]) and (hack is None) and not accepted
+            # P1-③ (AIDE²/RSI): 隐藏评分机制——物理内容 BLOCK 数作为隐藏标准。
+            # AIDE² 教训：外层用内层看不到的隐藏分数选择，防 reward-hacking。
+            # 只在可见分数提高 + 无 hack 时才跑隐藏审计（避免每代开销）。
+            visible_ok = (candidate["score"] > current["score"]) and (hack is None)
+            hidden_blocks = 0
+            hidden_ok = True
+            if visible_ok:
+                hidden_blocks = _run_content_audit(tmp_lean, output_dir)
+                hidden_ok = hidden_blocks == 0  # 物理内容零重言式（隐藏门槛）
+            accepted = visible_ok and hidden_ok
+            # P0-③ learn_on_pass：分数不退化（≥）且无 hack 且通过隐藏门槛 也记录为「成功经验」（不替换当前）
+            learn_on_pass = (candidate["score"] >= current["score"]) and (hack is None) and hidden_ok and not accepted
 
             record = {
                 "generation": gen,
@@ -378,6 +486,10 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
                 "mutation_strategy": strat_name,
                 "defects_before": current["defects"],
                 "condition": defect_signature(current["defects"]),
+                "hidden_blocks": hidden_blocks,   # P1-③ (AIDE²/RSI): 隐藏分数（物理内容 BLOCK 数）
+                "three_criteria": three_criteria_score(   # P0-② (JANUS): 价值+信息增益+探索效用
+                    current["defects"], strat_name, replay, frozen_score=candidate["score"],
+                    j_score=j_score),                     # [v2.22.0] J-space 大脑支持度先验
                 "timestamp": datetime.now().isoformat(),
             }
             if hack:
@@ -412,6 +524,9 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
             elif hack:
                 print(f"[Gen {gen}] 🛡️ 拒绝（reward hack）: {hack}")
                 stall_counter += 1
+            elif not hidden_ok:
+                print(f"[Gen {gen}] 🚫 拒绝（隐藏门槛：物理内容 {hidden_blocks} 处重言式）")
+                stall_counter += 1
             elif learn_on_pass:
                 print(f"[Gen {gen}] 📌 记录成功经验（不退化 {current['score']} → {candidate['score']}，不替换）")
                 stall_counter += 1
@@ -420,10 +535,20 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
                 stall_counter += 1
 
     best_lean_path.write_text(current_text, encoding="utf-8")
+    # P0-① (AIDE²/RSI): RSI 等级评估 + 接受率量化
+    n_accepted = sum(1 for r in archive if r.get("accepted"))
+    rsi = assess_rsi_level(
+        seed_score=seed_score, best_score=current["score"],
+        n_generations=len(archive) - 1,
+        n_accepted=n_accepted, n_total=len(archive) - 1,
+    )
     best = {"best_score": current["score"], "best_defects": current["defects"],
             "best_lean": str(best_lean_path), "generations_run": len(archive) - 1,
-            "strategy_stats": replay.strategy_stats()}
+            "strategy_stats": replay.strategy_stats(),
+            "rsi_level_assessment": rsi}
     (output_dir / "result.json").write_text(json.dumps(best, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\n[Stage3.6] RSI 等级评估: Level {rsi['rsi_level']} — {rsi['rsi_label']} "
+          f"(gain={rsi['gain']}, 接受率 {rsi['acceptance_rate']:.1%} = {rsi['n_accepted']}/{rsi['n_total']})")
     return best
 
 
@@ -461,6 +586,8 @@ def main() -> int:
     ap.add_argument("--epsilon", type=float, default=0.15, help="ε-greedy 探索率（默认 0.15）")
     ap.add_argument("--output", default="/tmp/stage36_output", help="输出目录")
     ap.add_argument("--dry-run", action="store_true", help="只评估不调 LLM（离线自测）")
+    ap.add_argument("--j-score", type=float, default=None,
+                    help="J-space 大脑支持度先验（v2.22.0；缺省时尝试读 <output>/../stage_jspace.json）")
     args = ap.parse_args()
 
     lean_path = Path(args.lean)
@@ -469,15 +596,30 @@ def main() -> int:
         return 2
 
     output_dir = Path(args.output)
+
+    # [v2.22.0] J-space 先验：--j-score 未显式给定时，尝试读 <output>/../stage_jspace.json 的 path_j_score
+    j_score = args.j_score
+    if j_score is None:
+        jspace_file = output_dir.parent / "stage_jspace.json"
+        if jspace_file.exists():
+            try:
+                jdata = json.loads(jspace_file.read_text(encoding="utf-8"))
+                j_score = jdata.get("path_j_score")
+            except Exception:
+                j_score = None
+
     print("=" * 60)
     print("STAGE 3.6: Frozen Evaluator Evolution Loop (RSIHub + Dream-RSI)")
     print("=" * 60)
     print(f"种子: {lean_path.name}")
     print(f"代数: {args.generations} | ε: {args.epsilon} | 模式: {'dry-run' if args.dry_run else 'LLM 进化'}")
+    if j_score is not None:
+        print(f"J-space 先验: {j_score}（大脑支持度，供世界模型 PRUNE 保护）")
     print("=" * 60)
 
     t0 = time.time()
-    best = run_evolution(lean_path, output_dir, args.generations, args.dry_run, args.epsilon)
+    best = run_evolution(lean_path, output_dir, args.generations, args.dry_run, args.epsilon,
+                         j_score=j_score)
 
     print("\n" + "=" * 60)
     print(f"进化完成（{time.time()-t0:.1f}s）")

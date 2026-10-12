@@ -1,6 +1,6 @@
 # prove2me_workspace 二次评估（v2.18.0 之后的补充深读）
 
-评估对象：`prove2me_workspace-main.zip`（<project>，已解压 `prove2me_workspace/`）
+评估对象：`prove2me_workspace-main.zip`（D:\AI_for_Science，已解压 `prove2me_workspace/`）
 评估目的：找出对 scientific-discovery-proof 技能的增量价值，**不改变既有物理猜想形式化证明管线流程**（主线 Stage −1 → 0 → 1 → 2 → 2.5 → 3 → 3.5 → 4 不动）。
 
 ---

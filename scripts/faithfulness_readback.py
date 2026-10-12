@@ -55,8 +55,8 @@ READBACK_PRINCIPLES = """你是形式化证明的「盲读审计员」。你只�
 
 def _load_api_key() -> str:
     for env_path in [
-        ".env",
-        ".env",
+        "~/.hermes/.env",
+        "~/.hermes/.env",
         os.path.expanduser("~/.hermes/.env"),
     ]:
         if os.path.exists(env_path):

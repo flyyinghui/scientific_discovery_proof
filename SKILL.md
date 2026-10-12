@@ -8,8 +8,8 @@ description: >-
   70% time reduction vs standalone PPE. NEW v2.3: Stage −1 dual-use safety gateway,
   Stage 3.5 Hallucination Clipping (numeric claim ↔ Lean cross-reference + joint
   reliability objective), Stage 2 UCB exploration bonus, Stage 3 three-phase scaffolding.
-version: 2.19.0
-tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding, rsiagent, curriculum, exploration, planted-truth, constant-certification, bootloops, faithfulness, disproof, target-strength, anti-trivialization, total-function-default, vacuous-hypothesis, scout]
+version: 2.22.0
+tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding, rsiagent, curriculum, exploration, planted-truth, constant-certification, bootloops, faithfulness, disproof, target-strength, anti-trivialization, total-function-default, vacuous-hypothesis, scout, world-model, janus, three-criteria, jspace, brain-bridge]
 related_skills:
   - math-agent-framework (MAF stage 0)
   - SciExplorer (stage 1)
@@ -18,9 +18,60 @@ related_skills:
   - ai-scientist-v2 (stage 4)
 ---
 
-# Scientific Discovery & Proof — Integrated Pipeline v2.15
+# Scientific Discovery & Proof — Integrated Pipeline v2.22
 
 Five-stage end-to-end pipeline for physics conjecture discovery → formal verification → publication.
+
+**NEW in v2.22.0** (J-space 桥接矩阵动态化，2026-10-12): **幽灵子系统修复 + 大脑支持度闭环**。
+把「文档化但零实现」的 J-space 桥接矩阵从宣传变成可执行信号：
+① **新 `scripts/jspace_bridge.py`** —— 用 `brain.recall()` 真实语义检索**动态重算** J-score
+（替代 references/jspace-bridge-matrix.md 的硬编码 12×12 快照），三成分 J = 0.4·sim + 0.3·MI
++ 0.3·co_activation（sim=概念代表向量余弦相似度 / MI=召回 neuron Jaccard 共现 /
+co_activation=共同召回比例），附 `calibrate()` 阈值重标定提示。
+② **接入 pipeline** —— 新增 `run_jspace_grounding`（一次性子进程加载大脑算全部概念 J-score），
+Stage 1 的 `j_score_hint` 占位符 → 真实 `path_j_score`，新增 `--skip-brain` 开关。
+③ **喂给世界模型** —— `WorldModel.predict()` 新增 J-space 先验（j_score ≥ 0.5 保护候选不被
+历史剪枝），`three_criteria_score()` 报告 `brain_support` 字段，形成「大脑知识 → 证明策略
+预筛选」闭环。
+完整评估见 `references/jspace-bridge-dynamic-landing.md`。
+
+诚实边界：动态 J-score 值域 ≠ 硬编码矩阵值域（阈值需按当前脑重标定）；J-score 是「先验支持度」
+非硬门控（硬门控仍由 Stage 3.5 审计负责）；大脑加载昂贵（181K 神经元 ~35-170s），设计为
+一次性子进程绝不内联进进化循环。
+
+**NEW in v2.21.0** (from JANUS, 中科院计算所 AI 安全国重《Predict-Verify-Evolve》arXiv:2610.13194, 2026-10-12): **世界模型（预执行预测）+ 三标准评分**。
+把 JANUS 的两项 P0 增量落地到 Stage 3.6 进化循环，**不动主线五阶段**：
+① **P0-① 世界模型（预执行预测）**（新 `scripts/world_model_prescreen.py` 的 `WorldModel`）——
+在昂贵的 LLM 变异 + Lean 编译之前，用 archive.jsonl 历史预测一次 (strategy × condition)
+变异的期望增益 + 达成 0 sorry 的概率。有足够历史 + 预测无增益 + 0-sorry 概率低 → PRUNE
+（跳过本次变异省成本）。已接入 `stage36_evolution.py` 每代变异前。
+② **P0-② 三标准评分（价值 + 信息增益 + 探索效用）**（同脚本 `three_criteria_score`）——
+把 JANUS 三标准落到候选评估，补当前 Stage 3.6 只有「单一缺陷扣分」的缺口：信息增益
+（盲区缺陷占比 + 新 condition 奖励）+ 探索效用（UCB 欠采样策略加分）。每个 archive
+record 新增 `three_criteria` 字段。
+完整评估见 `references/janus-world-model-integration.md`。
+
+诚实边界：① 世界模型是**预筛选器**（省成本），**不替代** RSIHub 冻结评估器——
+PRUNE 只跳过变异，幸存者仍走冻结评估器 + 隐藏物理内容审计定最终分数；② 三标准是
+**排序 + 归档**信号，不改变接受判定（防「探索效用」给低质证明放行的 reward-hack）；
+③ 世界模型纯历史统计、无 LLM、确定性，候选者无法改写，满足「评估器冻结」原则。
+
+**NEW in v2.20.0** (from AIDE²/RSI, Weco AI《Recursive Self-Improvement of AI Research Agents》2026-09-22, 2026-10-12): **RSI 等级评估 + 点火测试 + 隐藏评分机制**。
+把 AIDE² 的三项独特增量落地到 Stage 3.6 进化循环，**不动主线五阶段**：
+① **P0-① RSI 等级评估（Level 0–3）**（`stage36_evolution.py` 新增 `assess_rsi_level`）——
+进化循环总结时输出 `rsi_level_assessment` 字段，诚实标注处于哪个 AIDE² 阶梯：
+Level 0 委托（无净正增益）/ Level 1 净正（比人类手调高效改进）/ Level 2 点火
+（需 ignition_test 诊断）/ Level 3 拐点（永不声称）。同时量化接受率（P3-⑤）。
+② **P0-② 点火测试**（新 `scripts/ignition_test.py`）——读 archive.jsonl，按 generation 分前/后
+两半比较接受率 + 平均 gain，后期显著高于早期 → 点火弱信号（Level 2 候选）。这是
+「改进自身改进能力」的唯一可操作诊断。
+③ **P1-③ 隐藏评分机制**（`stage36_evolution.py` gate 阶段）——把评分拆「可见分数
+（编译 0 sorry）+ 隐藏分数（physical_content_audit 的 BLOCK 数）」双通道，只在可见分数
+提高时才跑隐藏审计，物理内容零重言式才通过。AIDE² 借此把 reward-hacking 率从 63%→34%。
+完整评估见 `references/aide2-rsi-integration.md`。
+
+诚实边界：①是诚实标注（区分 Level 0/1，不声称 Level 2/3）；②是趋势诊断（非「改进
+自身改进能力」的严格证明）；③是事前预防（物理内容非平凡门槛，非形式化保证）。
 
 **NEW in v2.19.0** (from prove2me 二次评估，2026-10-08): **形式化忠实性前置规范 + 反证分支 + 退化输入检测**。
 深读 prove2me_workspace 全库（SKILL.md + 13 reference + 2 Lean 脚本），在 v2.18.0 已落地的 5 项
@@ -323,6 +374,22 @@ python stage36_evolution.py \
   --generations 3 \
   --output /tmp/stage36/          # 加 --dry-run 离线自测（只评估不调 LLM）
 
+# Stage 3.6+ ignition test (点火测试, 新增 v2.20.0, AIDE²/RSI Level 2 诊断)
+python ignition_test.py \
+  --archive /tmp/stage36/archive.jsonl \
+  --output /tmp/ignition.json      # 后期接受率/gain 显著高于早期 → 点火弱信号
+
+# Stage 3.6+ world model pre-screen (世界模型+三标准评分, 新增 v2.21.0, JANUS)
+# 已自动接入 stage36_evolution.py（变异前预筛选 + record 记 three_criteria 字段），无需额外参数。
+# 独立自测：
+python world_model_prescreen.py --self-test   # 验证三标准评分 + 世界模型 predict/PRUNE
+
+# J-space 桥接（动态 J-score, 新增 v2.22.0，替代硬编码矩阵 + j_score_hint 占位符）
+# 已自动接入 pipeline_orchestrator.py（spec_check 后运行，--skip-brain 可跳过）。
+# 独立运行 / 自测：
+python jspace_bridge.py --conjecture /path/conjecture.json --output /tmp/jspace.json
+python jspace_bridge.py --self-test            # mock brain 离线自测（不加载 181K 神经元）
+
 # Stage 3.7 proof policy meta-optimizer (证明策略元优化, 新增 v2.12.0, Dream-RSI P0/P2/P3)
 python proof_policy_optimizer.py \
   --archive /path/to/stage36/archive.jsonl \
@@ -375,13 +442,13 @@ python constant_certify.py --target NAME --value X --ring "pi**2" "1" --height 1
 
 # Stage 3.6b — 接入 RSIHub（正式集成，2026-09-04）
 # 用 RSIHub 真实 operator 类 + 冻结评估器 + archive.jsonl 做 Lean 证据链自我进化
-cd ~/projects/RSIHub
-.venv/bin/python ~/skills/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
+cd ~/projects/ai_for_science/RSIHub
+.venv/bin/python ~/.hermes/skills/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
   --lean /path/to/proof.lean --generations 3 --output /tmp/lean_evo [--dry-run]
 # 详见 references/rsihub-lean-bridge.md + skill: rsihub
 
 # MAF bridge standalone
-cd ~/projects/math-agent-framework
+cd ~/projects/ai_for_science/math-agent-framework
 python maf_bridge.py
 ```
 
