@@ -33,7 +33,7 @@ v2.7.0（2026-09-17）落地了 Dream-RSI 的「重放模拟器」**表层**—�
 
 策略开发（`develop_candidates`）：
 - **参数扰动**（`mutate_params`，确定性，无 LLM）：权重 ±20%、并行 ±1、放弃阈值 ±0.05、ε ±0.05。
-- **LLM 开发**（`_llm_develop_policy`，可选）：v4-flash 读当前策略 + 重放评估报告，产出改进策略 JSON。
+- **LLM 开发**（`_llm_develop_policy`，可选）：deepseek-flash 读当前策略 + 重放评估报告，产出改进策略 JSON。
 
 ### P2 — replay objective 三项
 
@@ -98,7 +98,7 @@ python proof_policy_optimizer.py \
     --beta1 0.1 --beta2 0.5 \
     --output /tmp/policy_opt/ --dry-run
 
-# 元优化（含 LLM 策略开发：v4-flash 读重放轨迹改进策略）
+# 元优化（含 LLM 策略开发：deepseek-flash 读重放轨迹改进策略）
 python proof_policy_optimizer.py \
     --archive /path/to/stage36/archive.jsonl \
     --rounds 3 --candidates 8 \
@@ -117,7 +117,7 @@ python proof_policy_optimizer.py \
 | discovery tree → replay simulator | archive.jsonl 去重 condition → 决策点 |
 | offline evaluation | `PolicyReplayEvaluator.evaluate()`（历史重放，不调 LLM） |
 | replay objective（质量 − β1·成本 + β2·并行） | `V = quality − β1·cost + β2·avg_parallel`（P2） |
-| policy improvement（策略开发 agent） | `develop_candidates`（参数扰动 + 可选 v4-flash） |
+| policy improvement（策略开发 agent） | `develop_candidates`（参数扰动 + 可选 deepseek-flash） |
 | policy selection（单调保证） | 候选集含 π_t，选 max（P3） |
 
 **未落地的部分**：Dream-RSI 的「发现树结构重放」（树 parent-child 关系）留作 P1——

@@ -15,7 +15,7 @@ scientific-discovery-proof 管线目前只有「证明」分支，缺「反证�
 
 用法：
   python disproof_probe.py --conjecture conjecture.json --output /tmp/disproof.json
-  python disproof_probe.py --conjecture conjecture.json --deepseek-key sk-... --output /tmp/disproof.json
+  python disproof_probe.py --conjecture conjecture.json --deepseek-key <YOUR_API_KEY> --output /tmp/disproof.json
   python disproof_probe.py --self-test
 
 依赖：openai（DeepSeek）；无 key 时回退确定性 mock（离线可跑）。

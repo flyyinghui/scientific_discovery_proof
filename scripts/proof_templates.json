@@ -22,7 +22,7 @@
     {
       "id": "trivial_stub_replace",
       "defect_types": ["trivial_or_true_stub"],
-      "trigger": "theorem 体为 := by trivial / := True 空壳（DeepSeek v4-flash 常见缺陷）",
+      "trigger": "theorem 体为 := by trivial / := True 空壳（deepseek-flash 常见缺陷）",
       "pattern": "替换为真实策略体：calc 链 / nlinarith / field_simp / ring / exact ..._axiom / native_decide",
       "few_shot_before": "theorem kls_geometric : λ_KLS = 35/3 := by trivial",
       "few_shot_after": "theorem kls_geometric : λ_KLS = 35/3 := by\n  calc λ_KLS = dim_R / 3 := kls_scaling dim_R\n       _ = 35 / 3 := by norm_num",

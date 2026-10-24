@@ -67,7 +67,7 @@ THRESHOLD_HONEST = 0.50
 class JSpaceBridge:
     """动态 J-space 桥接：用 brain.recall() 真实检索结果计算 J-score。"""
 
-    def __init__(self, data_dir: str = "~/projects/ai_for_science/neural_memory_data",
+    def __init__(self, data_dir: str = "~/projects/neural_memory_data",
                  brain=None, top_k: int = 20):
         self.data_dir = data_dir
         self.top_k = top_k
@@ -78,7 +78,7 @@ class JSpaceBridge:
     @property
     def brain(self):
         if self._brain is None:
-            sys.path.insert(0, "~/projects/ai_for_science")
+            sys.path.insert(0, "~/ai_for_science")
             try:
                 from neural_memory_brain import NeuralMemoryBrain
             except ImportError:

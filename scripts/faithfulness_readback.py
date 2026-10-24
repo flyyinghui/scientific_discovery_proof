@@ -4,7 +4,7 @@ faithfulness_readback.py — 形式化忠实性盲读回审计（prove2me read-b
 ================================================================================
 Stage 3.5a（在自洽性审计之前）。检测 Lean formalization 是否忠实于物理猜想意图。
 
-两阶段（均走 DeepSeek v4-flash，thinking disabled）：
+两阶段（均走 deepseek-flash，thinking disabled）：
   阶段1 盲读：只给 Lean 声明（不给物理意图/源材料），生成自然语言 read-back
            —— 盲读是关键：知道「代码该说什么」的读者会把意图读进去，偏差就消失了。
   阶段2 对比：read-back vs 猜想意图，检测 faithfulness gap（形式化偏差）
@@ -55,8 +55,8 @@ READBACK_PRINCIPLES = """你是形式化证明的「盲读审计员」。你只�
 
 def _load_api_key() -> str:
     for env_path in [
-        "~/.hermes/.env",
-        "~/.hermes/.env",
+        "~/projects/ML-Master/.env",
+        "~/projects/cityhdg/spatial_agent/.env",
         os.path.expanduser("~/.hermes/.env"),
     ]:
         if os.path.exists(env_path):

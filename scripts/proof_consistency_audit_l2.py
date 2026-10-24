@@ -47,11 +47,11 @@ L2_CANDIDATE_TYPES = {
 
 
 class DeepSeekLLM:
-    def __init__(self, model: str = "deepseek-v4-flash"):
+    def __init__(self, model: str = "deepseek-flash"):
         self.model = model
         self.api_key = os.environ.get("DEEPSEEK_API_KEY")
         if not self.api_key:
-            for p in ["~/.hermes/.env"]:
+            for p in ["~/projects/cityhdg/spatial_agent/.env"]:
                 if os.path.exists(p):
                     with open(p) as f:
                         for line in f:

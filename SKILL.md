@@ -7,9 +7,15 @@ description: >-
   → AI-Scientist V2 (paper generation). 78%→65% end-to-end proof success rate,
   70% time reduction vs standalone PPE. NEW v2.3: Stage −1 dual-use safety gateway,
   Stage 3.5 Hallucination Clipping (numeric claim ↔ Lean cross-reference + joint
-  reliability objective), Stage 2 UCB exploration bonus, Stage 3 three-phase scaffolding.
-version: 2.22.0
-tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding, rsiagent, curriculum, exploration, planted-truth, constant-certification, bootloops, faithfulness, disproof, target-strength, anti-trivialization, total-function-default, vacuous-hypothesis, scout, world-model, janus, three-criteria, jspace, brain-bridge]
+  reliability objective), Stage 2 UCB exploration bonus, Stage 3 three-phase scaffolding. NEW v2.23: EmbeddingGemma-2 Lean lemma
+  retriever (recall@10=0.55) for Stage 3 candidate recall. NEW v2.24: Stage 3.8
+  pipeline meta-evolution (ScienceBuddy harness-as-object inner recursion).
+  NEW v2.25: Stage 3.9 proof manager agent (AI-Scientist P0 cross-stage meta-orchestrator)
+  + Stage 3 best-first tree search with LLM comprehensive selection (AI-Scientist P1).
+  NEW v2.26: P0 proof_benchmark (ground-truth 基准集准确率验证) + P1 null_model_probe
+  (数值置换检验) + claim_strength_audit (声称强度审计) + Stage 3.6 收益递减停止 (Kosmos).
+version: 2.26.0
+tags: [pipeline, discovery, proof, orchestration, formal-verification, maf, symbolic, consistency-audit, recursive-repair, safety-gateway, hallucination-clipping, ucb, scaffolding, rsiagent, curriculum, exploration, planted-truth, constant-certification, bootloops, faithfulness, disproof, target-strength,  anti-trivialization, total-function-default, vacuous-hypothesis, scout, world-model, janus, three-criteria, jspace, brain-bridge, embedding-retrieval, lean-lemma, ai-scientist, proof-manager, bfts]
 related_skills:
   - math-agent-framework (MAF stage 0)
   - SciExplorer (stage 1)
@@ -18,9 +24,77 @@ related_skills:
   - ai-scientist-v2 (stage 4)
 ---
 
-# Scientific Discovery & Proof — Integrated Pipeline v2.22
+# Scientific Discovery & Proof — Integrated Pipeline v2.26
 
 Five-stage end-to-end pipeline for physics conjecture discovery → formal verification → publication.
+
+**NEW in v2.26.0** (from Kosmos, jimmc414/Kosmos, Lu et al. 2024 arXiv:2511.02824, 2026-10-24):
+**P0 基准集准确率验证 + P1 三项诚实度量机制**。把 Kosmos（实验科学 AI 科学家）的四个可移植
+机制落地，**不动主线五阶段**，补「正确率数字的诚实度量」这个元层缺口：
+① **P0 `proof_benchmark.py`（ground-truth 基准验证）**——一组已知真假的物理猜想（正例=已知成立
+定理 / 反例=已知为假·混淆猜想），验证管线对每条给出正确判断，诚实计算准确率。内置 SL(6,C) 六条
+种子（3 正例 + 3 反例：g_TC²=8π²/35 历史 bug、|ρ|²=35 混淆实形式、c_β 假精确等式等）。这是
+scientific-discovery-proof 长期缺失的「78%→65% 数字无独立基准」的修复。
+② **P1 `null_model_probe.py`（数值置换检验）**——数值发现必须在随机扰动下消失，否则是平凡恒等式
+/数值巧合/假阳性（对抗 LLM 数值验证的 sycophancy loop）。与 planted_truth_gate 互补。
+③ **P1 `claim_strength_audit.py`（声称强度审计）**——强声称词（prove/establish/demonstrate）vs
+Lean 证据链等级（L0 黄金门控/L1 条件定理/L2 多 axiom·校准），检测过度声称（对应预测度诚实化）。
+④ **P1 Stage 3.6 收益递减停止**——连续 3 代 gain 递减且末代 <5 分 → 主动提前停止（省 token/防过拟合）。
+完整评估见 `references/kosmos-integration-assessment.md`。
+
+诚实边界：Kosmos 是实验科学框架，其 null model/统计验证是归纳统计，**不能提升演绎证明的正确率**
+（那是 Lean 编译器的职责）；这四个增量的价值在数值层假阳性、论文层诚实度、元层基准度量、迭代层
+停止准则。Kosmos 自己 README 自认「Not a reproduction study，未复现 79.4%」——可移植的是机制不是数字。
+
+**NEW in v2.25.0** (from AI-Scientist, Nature 2026 "Towards end-to-end automation of AI research",
+SakanaAI; 2026-10-18): **Stage 3.9 证明管理器 agent + Stage 3 best-first tree search**。补上
+「证明管线缺的元层判断」与「多草稿树搜索」两个增量，**不动主线五阶段**：
+① **P0 Stage 3.9 Proof Manager Agent**（新 `scripts/proof_manager_agent.py`）——跨阶段元协调器，
+把 AI-Scientist 的 Experiment Manager Agent（AgentManager 三 eval：stage_config / stage_progress /
+stage_completion）移植为「证明型四阶段」（skeleton_implementation → compile_fix → sorry_reduction →
+axiom_ablation）+ 阶段继承（stage N+1 继承 stage N 最佳证明）。LLM 只**建议**（推进/重试/放弃），
+最终通过由**确定性黄金门控**（编译 EXIT=0 + 0 sorry/admit/axiom + 物理内容非平凡）决定；
+新增 abandon_or_rescope 诚实降级（停滞超 max_iterations → 建议重标定猜想而非硬走到底）。
+② **P1 Stage 3 Best-First Tree Search**（新 `scripts/bfts_search.py`）——把 AI-Scientist-v2 的
+BFTS（journal.Node / best-first 展开 / debug-improve 分流 / node_selection_spec LLM 综合选择）
+移植为证明候选树：multi-draft 并行 + metric 优先展开（编译>低 sorry>低 axiom>高结构分）+
+debug（修编译）/improve（减 sorry）分流 + LLM 综合选择（不只 sorry_count，综合结构完整性/证据链/
+命名空间覆盖）。BFTS 与 MCTS 共存（BFTS 多草稿+分流，MCTS 探索/利用权衡），不替代冻结评估器。
+完整评估见 `references/ai-scientist-integration-assessment.md`。
+
+诚实边界：① P0 的 LLM 只判断「是否值得继续投入 + 该往哪走」，不是「证明是否成立」——成立仍由
+编译 + 0 sorry/axiom + 物理内容审计保证；② P1 的 best-first 贪心可能局部最优（MCTS UCB 探索项
+互补）；③ 两脚本均 stdlib-only + `--mock` 确定性回退 + `--self-test` 离线自测。
+
+**NEW in v2.24.0** (from ScienceBuddy, arXiv:2609.17523, 2026-10-13): **Stage 3.8 pipeline 元进化**
+（harness 作为可进化的一等对象）。把 ScienceBuddy 的「内层递归」（固定模型，改进 harness）
+落地为 `scripts/pipeline_meta_evolution.py`：把 pipeline 编排逻辑（stage 顺序 / 每 stage 参数 /
+gate 规则 / 选择策略）抽象为可替换的 `PipelineHarness`（编排策略 JSON），用辅助模型
+（deepseek-flash，thinking disabled）提议改进，在 Val 任务集上确定性评估（结构完整性 +
+历史证据），严格更优才替换，append-only 归档 `harness_archive.jsonl`。
+完整评估见 `references/sciencebuddy-integration-assessment.md`。
+
+诚实边界：本机评估是「结构完整性 + 历史证据」近似（P620 无法重跑完整 pipeline 求真实证明
+成功率），真实优劣区分需 RTX4000 服务器重跑（见 P0-② 优化说明
+`references/p02-double-recursion-rtx4000-plan.md`）；辅助模型只提议不评分，最终采纳由确定性
+评估器决定（对齐 ScienceBuddy 辅助模型参数固定原则）。
+
+**NEW in v2.23.0** (EmbeddingGemma-2 Lean 引理检索模型接入，2026-10-13): **Stage 3 引理召回**。
+新增 `scripts/lean_lemma_retriever.py`，接入在 openai_math Lean 依赖对（377K）上全参微调的
+`google/embeddinggemma-2-740m` 引理检索模型（**recall@10 = 0.5505**，增强文本口径），为
+PPE-V5.1Hybrid 证明搜索（MCTS/ABC）提供「给定定理 → 候选引理/定义」召回：
+① **LemmaRetriever 类** —— 编码 18 万 Lean 声明库为索引，`recall(定理名)` / `recall_by_text(自由文本)`
+返回 top-k 候选依赖（增强文本 = 名字词化 + 类型签名120 + docstring60，与训练口径一致）。
+② **独立 venv 隔离** —— transformers 5.19.0（Hermes 主 venv 的 4.57.3 不认识 `embedding_gemma2`
+架构）+ torch 2.5.1+cu121（P620 Pascal 只支持到 cu121），不污染主 venv 脆弱 torch。
+③ **声明库自重建** —— `parse_lean_declarations.py` 从 openai_math（150,912 .lean）重新解析
+`declarations.jsonl`（短名 → signature + docstring）。
+完整接入见 `references/embeddinggemma2-lean-integration.md`。
+
+诚实边界：recall@10=0.5505 是离线同分布指标，真实证明搜索收益**未验证**（需接入 Stage 3 后跑
+实际任务对比）；微调语义偏 openai_math 命名风格，跨库（Mathlib/自制定理）迁移未测；P620 不支持
+bf16，加载必须 float32；模型未在引用核查任务上微调（Stage 4.5 属任务迁移）；**本机编码 ~72 条/s，
+185 万声明全量建索引 ≈7 小时，实际部署按需编码子集（几百~几千条，秒级）而非全量索引**。
 
 **NEW in v2.22.0** (J-space 桥接矩阵动态化，2026-10-12): **幽灵子系统修复 + 大脑支持度闭环**。
 把「文档化但零实现」的 J-space 桥接矩阵从宣传变成可执行信号：
@@ -133,7 +207,7 @@ canonical 负对照）。任一对照失败 → BLOCK（在 Stage 3 前终止）
 新增 `scripts/proof_policy_optimizer.py`，落地 Dream-RSI 的 P0/P2/P3 三项机制，**不动主线五阶段**：
 ① **P0 探索策略元优化**：把「证明策略」（5 个变异策略的偏好权重 / 并行度 W / 放弃阈值 / 探索率 ε）
 编码为可执行 `ProofPolicy` 对象，用 archive.jsonl 历史重放反馈迭代改进策略参数本身
-（`ProofPolicy.mutate_params` 参数扰动 + 可选 `_llm_develop_policy` v4-flash 策略开发）。
+（`ProofPolicy.mutate_params` 参数扰动 + 可选 `_llm_develop_policy` deepseek-flash 策略开发）。
 ② **P2 replay objective 三项**：`V = 质量 − β1·成本 + β2·平均并行度`（`PolicyReplayEvaluator`），
 量化「并行证明 vs 串行证明 vs 放弃」的收益，β1/β2 控制成本/并行权衡。
 ③ **P3 单调性保证**：候选策略集始终包含当前策略 π_t，选 max 保证不退化。
@@ -230,7 +304,7 @@ axiomatize / tactic_complete / lemma_decompose / deduplicate），archive.jsonl 
 **冗余引理**（从未被下游使用）+ **未使用的 honest-axiom**（表演性诚实变体）+ 悬空引用。
 ② 新增 **Stage 3.6 冻结评估器进化循环**（`scripts/stage36_evolution.py`，RSIHub 的
 select→evaluate→analyze→mutate→gate→record，用 MathCode/确定性评分当冻结评估器，
-DeepSeek v4-pro 诊断 + v4-flash 修复，严格改进门控 + append-only archive.jsonl 证据链）。
+DeepSeek v4-pro 诊断 + deepseek-flash 修复，严格改进门控 + append-only archive.jsonl 证据链）。
 完整评估与映射见 [`references/rsihub-leanmarathon-integration.md`](references/rsihub-leanmarathon-integration.md)。
 
 **NEW in v2.3.0** (from Gemini Co-Scientist, arXiv:2608.26701): four concrete upgrades —
@@ -290,7 +364,7 @@ axiom-count mismatch, phantom theorems, `:= by trivial` stubs, and discrete-spec
 │   ├─ 生成证明变体任务队列（课程驱动主动探索）                     │
 │   ├─ weaken/strengthen/boundary/recombine/stress 五类型          │
 │   ├─ 输入: conjecture + 排名 + archive.jsonl 历史证据            │
-│   ├─ LLM (v4-flash) 生成，无 key 回退确定性 mock 模板            │
+│   ├─ LLM (deepseek-flash) 生成，无 key 回退确定性 mock 模板            │
 │   └─ 输出: stage25_curriculum.json (证明变体任务队列)            │
 ├──────────────────────────────────────────────────────────────────┤
 │ Stage 3 — PPE-V5.1Hybrid: Deep Formal Proof                     │
@@ -327,7 +401,7 @@ python pipeline_orchestrator.py \
   --stages -1,0,1,2,2.5,3,4 \
   --enable-maf \
   --enable-sciexplorer \
-  --deepseek-key sk-...
+  --deepseek-key <YOUR_API_KEY>
 
 # Stage 0.5 strategy explorer (证明策略探索, 新增 v2.11.0, Colosseum)
 python strategy_explorer.py \
@@ -397,6 +471,36 @@ python proof_policy_optimizer.py \
   --beta1 0.1 --beta2 0.5 \
   --output /tmp/policy_opt/       # 加 --dry-run 只用参数扰动；--self-test 离线全流程自测
 
+# Stage 3.9 proof manager agent (证明管理器 agent, 新增 v2.25.0, AI-Scientist P0)
+# 跨阶段元协调器：LLM 判断证明策略推进/重试/放弃 + 四阶段管理 + 阶段继承。
+python proof_manager_agent.py \
+  --state /path/to/proof_state.json \
+  --output /tmp/manager_decision.json     # 加 --mock 确定性决策（无 API）
+python proof_manager_agent.py --self-test  # 离线自测（四阶段推断 + 黄金门控 + mock 决策）
+
+# Stage 3 best-first tree search (BFTS + LLM 综合选择, 新增 v2.25.0, AI-Scientist-v2 P1)
+# 多草稿并行 + metric 优先展开 + debug/improve 分流 + LLM 综合选择最佳候选。
+python bfts_search.py \
+  --candidates /path/to/proof_candidates.json \
+  --output /tmp/bfts_tree.json     # 加 --mock 只用 metric 选择（无 API）
+python bfts_search.py --self-test   # 离线自测（展开顺序 + 分流 + metric 选择）
+
+# Stage 0.9 proof benchmark (ground-truth 基准集准确率验证, 新增 v2.26.0, Kosmos P0)
+# 一组已知真假的物理猜想，验证管线给出正确判断，诚实计算「正确率」这个数字。
+python proof_benchmark.py --self-test               # 内置 mock 自测
+python proof_benchmark.py                           # 内置 SL6C 六条种子基准集
+python proof_benchmark.py --items benchmark.json --output report.json
+
+# Stage 1.5c null model probe (数值置换检验假阳性检测, 新增 v2.26.0, Kosmos P1)
+# 数值发现必须在随机扰动下消失，否则是平凡恒等式/数值巧合/假阳性。
+python null_model_probe.py --self-test              # 离线自测
+python null_model_probe.py --script probe.py --output report.json
+
+# Stage 4.5 claim strength audit (论文声称强度审计, 新增 v2.26.0, Kosmos P1)
+# 强声称词 vs Lean 证据链等级，检测过度声称（对应预测度诚实化）。
+python claim_strength_audit.py --self-test          # 离线自测
+python claim_strength_audit.py --paper paper.txt --lean proof.lean --output audit.json
+
 # Stage 3.6d deep refinement (DRS 深挖, 新增 v2.8.0, RSIAgent broad-then-deep)
 python deep_refinement.py \
   --lean /path/to/proof.lean \
@@ -442,13 +546,13 @@ python constant_certify.py --target NAME --value X --ring "pi**2" "1" --height 1
 
 # Stage 3.6b — 接入 RSIHub（正式集成，2026-09-04）
 # 用 RSIHub 真实 operator 类 + 冻结评估器 + archive.jsonl 做 Lean 证据链自我进化
-cd ~/projects/ai_for_science/RSIHub
-.venv/bin/python ~/.hermes/skills/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
+cd ~/projects/RSIHub
+.venv/bin/python ~/.hermes/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
   --lean /path/to/proof.lean --generations 3 --output /tmp/lean_evo [--dry-run]
 # 详见 references/rsihub-lean-bridge.md + skill: rsihub
 
 # MAF bridge standalone
-cd ~/projects/ai_for_science/math-agent-framework
+cd ~/projects/math-agent-framework
 python maf_bridge.py
 ```
 
@@ -523,7 +627,7 @@ checkable defects:
 | 2 | Performative honesty (comment-only tags) | Triple-GW V16: 26× `-- @[honest_axiom]`, 0 real attrs | WARN | L1 |
 | 3 | Axiom-count mismatch | CGICE V9.1: "14 axioms" vs 39 actual | WARN | L1 |
 | 4 | Phantom theorem (claimed but missing) | CGICE V9.1: "T4 fully verified" but no t4 in Lean | BLOCK | L1 |
-| 5 | `:= by trivial` stub | DeepSeek v4-flash tendency | WARN | L1 |
+| 5 | `:= by trivial` stub | deepseek-flash tendency | WARN | L1 |
 | 7 | Numeric claim not in Lean (v2.3.0) | paper claims value absent/contradicted in proof.lean | WARN/BLOCK | L1 |
 
 **L2 LLM structural layer** (`proof_consistency_audit_l2.py`, DeepSeek) — cross-axiom,

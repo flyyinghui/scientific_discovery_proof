@@ -109,7 +109,7 @@ def _diagnose(client, lean_text: str, defects: dict, target: str, difficulty: in
 
 
 def _repair(client, lean_text: str, plan: str, target: str, difficulty: int) -> str:
-    """v4-flash 深度修复：聚焦目标缺陷，按难度阶梯要求输出修复后完整 Lean。"""
+    """deepseek-flash 深度修复：聚焦目标缺陷，按难度阶梯要求输出修复后完整 Lean。"""
     ladder_req = DIFFICULTY_LADDER[difficulty]
     prompt = f"""你是 Lean 4 形式化证明专家。按下面的修复计划，**聚焦目标缺陷 {target}** 修复 Lean 文件。
 
@@ -128,7 +128,7 @@ def _repair(client, lean_text: str, plan: str, target: str, difficulty: int) -> 
 - 只聚焦目标缺陷 {target}，不要全盘重写其他部分。
 - 严格满足第 {difficulty} 级难度要求。
 - 不引入新 sorry/admit；不用 := by trivial 空壳。"""
-    out = _deepseek(client, "deepseek-v4-flash", prompt, 32768)
+    out = _deepseek(client, "deepseek-flash", prompt, 32768)
     out = re.sub(r"^```(?:lean)?\s*\n?", "", out)
     out = re.sub(r"\n?```\s*$", "", out)
     return out.strip() + "\n"

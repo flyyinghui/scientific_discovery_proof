@@ -19,7 +19,7 @@ from datetime import datetime
 # ── Configuration ────────────────────────────────────────────
 
 PIPELINE_ROOT = Path(__file__).resolve().parent.parent
-PROJECT_ROOT = Path("~/projects/ai_for_science")
+PROJECT_ROOT = Path("~/ai_for_science")
 
 STAGE_SCRIPTS = {
     1: {  # SciExplorer
@@ -234,7 +234,7 @@ def run_stage2_simpletes(conjecture_path: Path, stage1_output: dict, output_dir:
                      "\nReturn JSON array with rank, id, score (0-10), reason."
             
             response = client.chat.completions.create(
-                model="deepseek-v4-flash",
+                model="deepseek-flash",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=2048, temperature=0.3,
                 extra_body={"thinking": {"type": "disabled"}}
@@ -793,7 +793,7 @@ Write in IMRAD format (Introduction, Methods, Results, Discussion).
 Include an abstract. Output as clean markdown."""
     
     response = client.chat.completions.create(
-        model="deepseek-v4-flash",
+        model="deepseek-flash",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=16384, temperature=0.7,
         extra_body={"thinking": {"type": "disabled"}}
@@ -887,7 +887,7 @@ def _run_stage45_semantic_reference(paper_path: Path, output_dir: Path) -> dict:
 def _load_api_key() -> str:
     """Load DeepSeek API key."""
     for env_path in [
-        '~/.hermes/.env',
+        '~/projects/cityhdg/spatial_agent/.env',
         os.path.expanduser('~/.hermes/.env'),
     ]:
         if os.path.exists(env_path):

@@ -3,7 +3,7 @@
 **来源**：RSIAgent: Autonomous Exploration for Recursive Self-improvement in New Environments
 (arXiv:2609.15364, Aether AI, 2026-09-14)
 
-**集成日期**：2026-09-19 | **论文**：`~/projects/ai_for_science/papers/RSIAgent_2609.15364.pdf`
+**集成日期**：2026-09-19 | **论文**：`~/projects/papers/RSIAgent_2609.15364.pdf`
 
 ## 论文核心
 
@@ -78,7 +78,7 @@ python curriculum_planner.py --conjecture conjecture.json \
     --output stage25_curriculum.json [--mock]
 ```
 
-**LLM vs mock**：有 API key 时用 v4-flash（thinking disabled）生成针对性变体（实测暗物质拓扑缺陷
+**LLM vs mock**：有 API key 时用 deepseek-flash（thinking disabled）生成针对性变体（实测暗物质拓扑缺陷
 猜想生成 8 个高质量任务：非幂律淬火率弱化、±10% KZ 指数扰动、偏置 Z2 势压力测试等）；
 无 key 回退确定性 mock 模板（3 axiom × weaken+stress + 全局 boundary/strengthen/recombine）。
 
