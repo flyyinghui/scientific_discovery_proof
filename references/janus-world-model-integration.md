@@ -71,7 +71,7 @@ archive。**PRUNE 只省成本，不替代冻结评估器**——幸存者仍走
 
 ```bash
 # 世界模型 + 三标准评分 离线自测
-cd ~/.hermes/scientific-discovery-proof/scripts
+cd ~/.hermes/skills/scientific-discovery-proof/scripts
 python world_model_prescreen.py --self-test
 
 # 已自动接入 stage36_evolution.py（无需额外参数）

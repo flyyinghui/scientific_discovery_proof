@@ -96,7 +96,7 @@ comment_attrs = [l for l in lines if '-- @[honest_axiom' in l]
 
 **症状**：定理体 `:= by trivial` / `:= by rfl`，或 `:= True` 占位，编译通过但零数学内容。
 
-**案例**：deepseek-flash 生成 Lean 时，倾向给所有定理写 `:= by trivial`（对含数学内容的命题无法通过编译，但对 `True`/恒等式能通过）。
+**案例**：DeepSeek v4-flash 生成 Lean 时，倾向给所有定理写 `:= by trivial`（对含数学内容的命题无法通过编译，但对 `True`/恒等式能通过）。
 
 **检测方法**：
 ```python
