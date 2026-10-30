@@ -43,6 +43,47 @@ import numpy as np
 # J = α·sim + β·MI + γ·co_activation
 ALPHA, BETA, GAMMA = 0.4, 0.3, 0.3
 
+# ── 大脑数据 / 代码路径解析（env 优先 → 常见部署位置探测 → 约定路径） ────────
+# 数据目录须含 embeddings.npy / neurons.json / embedding_ids.json / meta.json
+BRAIN_DIR_CANDIDATES = [
+    r"<WORK_DIR>\neural_memory_data",
+    r"<WORK_DIR>\pyhsics_proof__engine_v5Hybrid\neural_memory_data",
+    "~/projects/ai_for_science/neural_memory_data",
+]
+# 代码目录须含 neural_memory_brain.py
+BRAIN_CODE_CANDIDATES = [
+    r"<WORK_DIR>",
+    r"<WORK_DIR>",
+    "~/projects/ai_for_science",
+]
+
+
+def resolve_brain_dir(explicit: str | None = None) -> str:
+    """解析大脑数据目录：显式参数 > NEURAL_MEMORY_DIR > 候选探测 > 约定路径。"""
+    import os
+    if explicit:
+        return os.path.expanduser(explicit)
+    env = os.environ.get("NEURAL_MEMORY_DIR")
+    if env:
+        return os.path.expanduser(env)
+    for c in BRAIN_DIR_CANDIDATES:
+        p = os.path.expanduser(c)
+        if os.path.isdir(p) and os.path.exists(os.path.join(p, "embeddings.npy")):
+            return p
+    return os.path.expanduser(BRAIN_DIR_CANDIDATES[-1])
+
+
+def resolve_brain_code_dir() -> str:
+    """解析含 neural_memory_brain.py 的代码目录。"""
+    import os
+    env = os.environ.get("NEURAL_MEMORY_CODE_DIR")
+    if env:
+        return os.path.expanduser(env)
+    for c in BRAIN_CODE_CANDIDATES:
+        if os.path.exists(os.path.join(os.path.expanduser(c), "neural_memory_brain.py")):
+            return os.path.expanduser(c)
+    return os.path.expanduser(BRAIN_CODE_CANDIDATES[-1])
+
 # 12 个 SL(6,C) 框架核心概念（label, brain.recall 查询串）
 DEFAULT_CONCEPTS: list[tuple[str, str]] = [
     ("g_Ricci",      "Ricci curvature scalar curvature Einstein manifold"),
@@ -67,9 +108,9 @@ THRESHOLD_HONEST = 0.50
 class JSpaceBridge:
     """动态 J-space 桥接：用 brain.recall() 真实检索结果计算 J-score。"""
 
-    def __init__(self, data_dir: str = "~/projects/neural_memory_data",
+    def __init__(self, data_dir: str | None = None,
                  brain=None, top_k: int = 20):
-        self.data_dir = data_dir
+        self.data_dir = resolve_brain_dir(data_dir)
         self.top_k = top_k
         self._brain = brain  # 可注入 mock brain（自测），None 则懒加载真实大脑
         self._sig_cache: dict[str, tuple | None] = {}
@@ -78,7 +119,7 @@ class JSpaceBridge:
     @property
     def brain(self):
         if self._brain is None:
-            sys.path.insert(0, "~/ai_for_science")
+            sys.path.insert(0, resolve_brain_code_dir())
             try:
                 from neural_memory_brain import NeuralMemoryBrain
             except ImportError:
@@ -107,17 +148,40 @@ class JSpaceBridge:
 
         vecs, weights, ids = [], [], set()
         for r in results:
+            # ── 召回集合的 neuron 标识（适配多种后端字段） ──
+            key = r.get("id")
+            if key is None:
+                key = r.get("title") or r.get("content")
+            if key:
+                ids.add(str(key)[:120])
+            # ── 逐条 embedding（旧后端: id + graph.neurons；新后端: 跳过, 走下方回退） ──
             nid = r.get("id")
-            neuron = self.brain.graph.neurons.get(nid) if nid else None
+            neuron = None
+            graph = getattr(self.brain, "graph", None)
+            if nid is not None and graph is not None and hasattr(graph, "neurons"):
+                neuron = graph.neurons.get(nid)
             emb = getattr(neuron, "embedding", None) if neuron is not None else None
-            if nid is not None and emb is not None:
-                ids.add(nid)
+            if emb is None:
+                emb = self._embedding_for_result(r)
+            if emb is not None:
                 vecs.append(np.asarray(emb, dtype=np.float32))
                 w = float(r.get("similarity", r.get("activation", 0.0)))
                 weights.append(max(w, 0.0))
+
         if not vecs:
+            # ── 回退：直接用 brain 的查询代表向量（新后端 NeuralMemoryBrain._embed_query） ──
+            qv = None
+            if hasattr(self.brain, "_embed_query"):
+                try:
+                    qv = np.asarray(self.brain._embed_query(concept), dtype=np.float32)
+                except Exception:
+                    qv = None
+            if qv is not None and qv.size > 1:
+                self._sig_cache[concept] = (qv, ids)
+                return self._sig_cache[concept]
             self._sig_cache[concept] = (None, ids)
             return self._sig_cache[concept]
+
         vecs = np.stack(vecs)
         w = np.asarray(weights, dtype=np.float32)
         wsum = float(w.sum())
@@ -125,6 +189,29 @@ class JSpaceBridge:
         sig = (vecs.T @ w, ids)
         self._sig_cache[concept] = sig
         return sig
+
+    def _embedding_for_result(self, r: dict):
+        """按 content 反查 brain 内部 embedding 矩阵（新后端兼容）；失败返回 None。"""
+        brain = self.brain
+        content = r.get("content") or r.get("title")
+        if not content:
+            return None
+        ids = getattr(brain, "_ids", None)
+        emb = getattr(brain, "_embeddings_normed", None)
+        if ids is None or emb is None:
+            return None
+        try:
+            idx = ids.index(content)
+        except (ValueError, AttributeError):
+            # content 可能被截断（title[:80]），退化为前缀匹配
+            idx = None
+            for i, nid in enumerate(ids):
+                if isinstance(nid, str) and nid.startswith(str(content)[:40]):
+                    idx = i
+                    break
+        if idx is None or idx >= len(emb):
+            return None
+        return emb[idx]
 
     # ── J-score 三成分 + 合成 ─────────────────────────────────────
     def j_score_pair(self, a: str, b: str) -> dict:

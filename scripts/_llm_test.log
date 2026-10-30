@@ -1,0 +1,10 @@
+D:\hermes_home\skills\scientific-discovery-proof\scripts\agent_llm.py:28: SyntaxWarning: invalid escape sequence '\c'
+  lean_path=r"...\cgice_proof.lean")
+D:\hermes_home\skills\scientific-discovery-proof\scripts\agent_fleet_real.py:23: SyntaxWarning: invalid escape sequence '\A'
+  run = run_proof_real(harness, r"...\A30_Formal_Verification.lean")
+LLM 可用: True
+
+[1] LLM 关闭 → 步数 1，P01 detail: no lean file and LLM unavailable
+
+[2] 三种 prompt_style 真调 LLM（各 1 次，有磁盘缓存）
+EXIT=127

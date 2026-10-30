@@ -244,7 +244,7 @@ def develop_candidates(current: ProofPolicy, n_candidates: int, rng: random.Rand
 
 
 def _llm_develop_policy(client, current: ProofPolicy, eval_report: dict):
-    """（可选）让 deepseek-flash 读当前策略 + 重放评估报告，产出改进的策略参数 JSON。
+    """（可选）让 v4-flash 读当前策略 + 重放评估报告，产出改进的策略参数 JSON。
 
     对应 Dream-RSI 的「policy-development agent 检查重放轨迹，改写策略代码」。
     """
@@ -267,7 +267,7 @@ def _llm_develop_policy(client, current: ProofPolicy, eval_report: dict):
 
 只输出 JSON，不要任何解释文字或 markdown 围栏。"""
         resp = client.chat.completions.create(
-            model="deepseek-flash",
+            model="deepseek-v4-flash",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3, max_tokens=2048, timeout=120,
             extra_body={"thinking": {"type": "disabled"}},
@@ -352,9 +352,9 @@ def optimize(archive_path: Path, output_dir: Path, rounds: int, n_candidates: in
 
 def _load_api_key() -> str:
     for env_path in [
-        "~/projects/cityhdg/spatial_agent/.env",
+        "~/.hermes/.env",
         str(Path.home() / ".hermes/.env"),
-        "~/projects/ML-Master/.env",
+        "~/.hermes/.env",
     ]:
         p = Path(env_path)
         if p.exists():

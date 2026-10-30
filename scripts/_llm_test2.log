@@ -1,0 +1,18 @@
+D:\hermes_home\skills\scientific-discovery-proof\scripts\agent_llm.py:28: SyntaxWarning: invalid escape sequence '\c'
+  lean_path=r"...\cgice_proof.lean")
+LLM 可用: True
+
+[1] LLM 关闭 → 步数 1，P01 detail: no lean file and LLM unavailable
+
+[2] 三种 prompt_style 真调 LLM（各 1 次，有磁盘缓存）
+  concise   ok=True  sig=c7fa10a120  [llm:concise] LLM generated 5 declaration(s): g_TC, lambda_p
+  不同产物指纹数: 1 / 2
+  ✅ P01 真产出 Lean 命题（prompt_style 已进 prompt，多 style 对比见 --compare）
+
+[3] memory_policy 对比
+  none:         sig=27f1aedf8f
+  archive_prior sig=bd0e3cebb7
+  相同=False（不同则说明记忆块真的进了 prompt）
+
+[OK] agent_llm self-test 通过
+EXIT=0

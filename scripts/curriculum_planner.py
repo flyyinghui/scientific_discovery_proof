@@ -60,7 +60,7 @@ TASK_TEMPLATES = {
 
 def _load_api_key() -> str:
     for env_path in [
-        '~/projects/cityhdg/spatial_agent/.env',
+        '~/.hermes/.env',
         os.path.expanduser('~/.hermes/.env'),
     ]:
         if os.path.exists(env_path):
@@ -156,7 +156,7 @@ def _mock_curriculum(conjecture: dict) -> list:
 
 
 def _llm_curriculum(conjecture: dict, ranked: dict, archive: list, api_key: str) -> list:
-    """用 deepseek-flash 生成课程（结合排名 + 历史证据）。"""
+    """用 DeepSeek v4-flash 生成课程（结合排名 + 历史证据）。"""
     from openai import OpenAI
     client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
@@ -187,7 +187,7 @@ def _llm_curriculum(conjecture: dict, ranked: dict, archive: list, api_key: str)
     )
 
     resp = client.chat.completions.create(
-        model="deepseek-flash",
+        model="deepseek-v4-flash",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=4096, temperature=0.4,
         extra_body={"thinking": {"type": "disabled"}},

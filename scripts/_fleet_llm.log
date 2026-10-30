@@ -1,0 +1,30 @@
+========================================================================
+轨迹对比报告（4 条 harness）
+========================================================================
+harness              fingerprint      lean  sorry   axioms   steps verdict
+baseline_concise_non 65ebde7e56d9       OK      0        0      10 PASS
+concise_archive      7e8f5ceea1d0       OK      0        0      10 PASS
+detailed_none        efddf661287d       OK      0        0      10 PASS
+detailed_archive     6ba6e9111640       OK      0        0      10 PASS
+
+首个分歧步：P01  [output_diverge]
+    · concise_archive 的产物与基准不同: '5a3ebb0007' vs 'c7fa10a120'
+
+全部分歧步（1 个）：
+  P01      output_diverge                   concise_archive 的产物与基准不同: '5a3ebb0007' vs 'c7fa10a120'
+
+注：lean/sorry/axioms/verdict 由 Arbiter 写入；本报告只做对齐与归因，不重新判定。
+
+=== 各 harness P01 产物 ===
+  baseline_concise_none      ok=True  sig=c7fa10a120  wall=  0.0s
+      [llm:concise] LLM generated 5 declaration(s): g_TC, lambda_perp, lambda_perp_value
+  concise_archive            ok=True  sig=5a3ebb0007  wall= 97.1s
+      [llm:concise] LLM generated 3 declaration(s): standardFramework, conjecture, lambda_perp_value
+  detailed_none              ok=True  sig=27f1aedf8f  wall=  0.0s
+      [llm:detailed] LLM generated 10 declaration(s): lambdaPerpValue, predictedGTCSq, SL6CFramework
+  detailed_archive           ok=True  sig=bd0e3cebb7  wall=  0.0s
+      [llm:detailed] LLM generated 7 declaration(s): lambdaPerpStandardValue, tripleGaugeBound, conditional_triple_g
+
+唯一产物指纹 4 / 4  -> harness 变体产生真实差异 ✅
+EXIT=0
+EXIT=0

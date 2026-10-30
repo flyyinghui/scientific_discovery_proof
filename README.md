@@ -131,7 +131,7 @@ See `references/` for per-framework integration notes and pitfalls.
 
 ## Version
 
-**v2.19.0** — formalization-faithfulness pre-declaration (target-strength + anti-trivialization), degenerate-input detection (total-function defaults + vacuous hypotheses), disproof branch (Stage 2.6), and scout failure-path reuse.
+**v2.24.0** — formalization-faithfulness pre-declaration (target-strength + anti-trivialization), degenerate-input detection (total-function defaults + vacuous hypotheses), disproof branch (Stage 2.6), and scout failure-path reuse.
 
 ## License
 

@@ -29,11 +29,6 @@ JANUS 增量（2026-10-12，arXiv:2610.13194，中科院计算所 Predict-Verify
   P0-② 三标准评分 : 价值 + 信息增益（盲区占比 + 新 condition）+ 探索效用（UCB），
         记入 archive record（three_criteria 字段），补 Stage 3.6 缺的探索项。
 
-Kosmos 增量（2026-10-24，jimmc414/Kosmos convergence.py 收益递减停止）：
-  P1 收益递减自动停止 : 连续 N 代 gain 递减且末代 gain 很小 → 主动提前停止
-        （对应 Kosmos 的 diminishing_returns 停止准则，省 token + 防过拟合），
-        与 stall_counter（无增益停滞）+ 满分收敛并行。
-
 循环：select(父代) → replay 选策略 → world model 预筛选 → analyze(DeepSeek 诊断 + 盲区提示) →
       mutate(DeepSeek 按策略修复) → gate(严格改进才接受) → record(archive.jsonl 带策略 + 三标准)
 
@@ -65,10 +60,6 @@ from world_model_prescreen import WorldModel, three_criteria_score
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 VENV_PYTHON = "/usr/local/lib/hermes-agent-v14/venv/bin/python"
-
-# P1 (Kosmos): 收益递减检测——连续 N 代 gain 递减且末代 gain 很小 → 主动停止
-DIMINISHING_WINDOW = 3      # 连续 N 代
-DIMINISHING_MIN_GAIN = 5.0  # 末代 gain 低于此值才触发（避免误停）
 
 # ── 冻结评估器（确定性，无 LLM）───────────────────────────────────
 
@@ -252,7 +243,7 @@ def _diagnose_stall(stall_counter: int, current: dict, replay: ReplaySimulator,
 
 def _load_api_key() -> str:
     for env_path in [
-        "~/projects/cityhdg/spatial_agent/.env",
+        "~/.hermes/.env",
         str(Path.home() / ".hermes/.env"),
     ]:
         p = Path(env_path)
@@ -317,7 +308,7 @@ def _analyze(client, lean_text: str, defects: dict, strat_name: str, blinds: lis
 
 
 def _mutate(client, lean_text: str, repair_plan: str, strat_name: str, few_shot: str = "") -> str:
-    """deepseek-flash 修复：按修复计划 + 策略侧重 + 已冻结证明模式(few-shot)产出修复后的完整 Lean 文件。"""
+    """v4-flash 修复：按修复计划 + 策略侧重 + 已冻结证明模式(few-shot)产出修复后的完整 Lean 文件。"""
     strat_cfg = MUTATION_STRATEGIES.get(strat_name, {})
     few_shot_note = ""
     if few_shot:
@@ -344,7 +335,7 @@ def _mutate(client, lean_text: str, repair_plan: str, strat_name: str, few_shot:
   要么显式改写为诚实公理 axiom 声明（附文献引用注释）。
 - 删除或接入所有冗余引理 / 未用 axiom。
 - 不引入新的 sorry；不使用 := by trivial 空壳。"""
-    out = _deepseek(client, "deepseek-flash", prompt, 32768)
+    out = _deepseek(client, "deepseek-v4-flash", prompt, 32768)
     # 剥离可能的 markdown 围栏
     out = re.sub(r"^```(?:lean)?\s*\n?", "", out)
     out = re.sub(r"\n?```\s*$", "", out)
@@ -409,7 +400,6 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
     else:
         templates = load_templates()   # P5: 已冻结证明模式库
         stall_counter = 0               # P0-①: 连续无增益代数
-        recent_gains = []               # P1 (Kosmos): 收益递减检测窗口
         for gen in range(1, generations + 1):
             # P2: ε-greedy 选择变异策略
             strategy = replay.choose(current["defects"], epsilon)
@@ -528,17 +518,6 @@ def run_evolution(lean_path: Path, output_dir: Path, generations: int,
                 current_text = mutated
                 current = candidate
                 stall_counter = 0
-                # P1 (Kosmos): 收益递减检测——连续 N 代 gain 递减且末代 gain 很小 → 主动停止
-                recent_gains.append(record["gain"])
-                if len(recent_gains) > DIMINISHING_WINDOW:
-                    recent_gains.pop(0)
-                if (len(recent_gains) >= DIMINISHING_WINDOW
-                        and all(recent_gains[i] > recent_gains[i + 1]
-                                for i in range(len(recent_gains) - 1))
-                        and recent_gains[-1] < DIMINISHING_MIN_GAIN):
-                    print(f"[Stage3.6] 📉 收益递减：最近 {DIMINISHING_WINDOW} 代 gain "
-                          f"{recent_gains} 递减且末代 < {DIMINISHING_MIN_GAIN} → 提前停止（省 token/防过拟合）")
-                    break
                 if current["score"] >= 100.0:
                     print("[Stage3.6] 收敛：满分达成")
                     break

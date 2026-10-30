@@ -30,7 +30,7 @@ from datetime import datetime
 
 def _load_api_key() -> str:
     for env_path in [
-        '~/projects/cityhdg/spatial_agent/.env',
+        '~/.hermes/.env',
         os.path.expanduser('~/.hermes/.env'),
     ]:
         if os.path.exists(env_path):
@@ -110,7 +110,7 @@ def _llm_strategies(conj: dict, api_key: str, paper: str) -> list:
     )
 
     resp = client.chat.completions.create(
-        model="deepseek-flash",
+        model="deepseek-v4-flash",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=4096, temperature=0.6,
         extra_body={"thinking": {"type": "disabled"}},
@@ -164,7 +164,7 @@ def _readiness_gate(strategies: list, api_key: str) -> list:
     )
     try:
         resp = client.chat.completions.create(
-            model="deepseek-flash",
+            model="deepseek-v4-flash",
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1024, temperature=0.2,
             extra_body={"thinking": {"type": "disabled"}},

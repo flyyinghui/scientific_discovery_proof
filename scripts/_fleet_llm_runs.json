@@ -1,0 +1,406 @@
+[
+ {
+  "harness_name": "baseline_concise_none",
+  "harness_fingerprint": "65ebde7e56d9",
+  "steps": [
+   {
+    "step_id": "P01",
+    "agent": "StatementTranslator",
+    "tool": "mathlib_lookup",
+    "ok": true,
+    "output_sig": "c7fa10a120",
+    "detail": "[llm:concise] LLM generated 5 declaration(s): g_TC, lambda_perp, lambda_perp_value",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "P03",
+    "agent": "TargetStrengthAuditor",
+    "tool": "mathlib_lookup",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "T01",
+    "agent": "SkeletonGenerator",
+    "tool": "lean_compile",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "T06",
+    "agent": "ProofStateDebugger",
+    "tool": "lean_compile",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "T07",
+    "agent": "SorryEliminator",
+    "tool": "lean_compile",
+    "ok": false,
+    "output_sig": "t07-nofile",
+    "detail": "no lean file and LLM unavailable",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "H02",
+    "agent": "ConditionalRefactorer",
+    "tool": "template_library",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "H05",
+    "agent": "PerformativeHonestyDetector",
+    "tool": "content_audit",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "E01",
+    "agent": "AxiomDependencyPrinter",
+    "tool": "lean_compile",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "E02",
+    "agent": "GoldenGateChecker",
+    "tool": "dag_audit",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "E06",
+    "agent": "ChainClosureAuditor",
+    "tool": "dag_audit",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   }
+  ],
+  "lean_ok": true,
+  "sorry_count": 0,
+  "axiom_count": 0,
+  "audit_verdict": "PASS",
+  "wall_s": 0.012
+ },
+ {
+  "harness_name": "concise_archive",
+  "harness_fingerprint": "7e8f5ceea1d0",
+  "steps": [
+   {
+    "step_id": "P01",
+    "agent": "StatementTranslator",
+    "tool": "mathlib_lookup",
+    "ok": true,
+    "output_sig": "5a3ebb0007",
+    "detail": "[llm:concise] LLM generated 3 declaration(s): standardFramework, conjecture, lambda_perp_value",
+    "duration_s": 97.108
+   },
+   {
+    "step_id": "P03",
+    "agent": "TargetStrengthAuditor",
+    "tool": "mathlib_lookup",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 97.108
+   },
+   {
+    "step_id": "T01",
+    "agent": "SkeletonGenerator",
+    "tool": "lean_compile",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 97.108
+   },
+   {
+    "step_id": "T06",
+    "agent": "ProofStateDebugger",
+    "tool": "lean_compile",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 97.108
+   },
+   {
+    "step_id": "T07",
+    "agent": "SorryEliminator",
+    "tool": "lean_compile",
+    "ok": false,
+    "output_sig": "t07-nofile",
+    "detail": "no lean file and LLM unavailable",
+    "duration_s": 97.108
+   },
+   {
+    "step_id": "H02",
+    "agent": "ConditionalRefactorer",
+    "tool": "template_library",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 97.108
+   },
+   {
+    "step_id": "H05",
+    "agent": "PerformativeHonestyDetector",
+    "tool": "content_audit",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 97.108
+   },
+   {
+    "step_id": "E01",
+    "agent": "AxiomDependencyPrinter",
+    "tool": "lean_compile",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 97.108
+   },
+   {
+    "step_id": "E02",
+    "agent": "GoldenGateChecker",
+    "tool": "dag_audit",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 97.108
+   },
+   {
+    "step_id": "E06",
+    "agent": "ChainClosureAuditor",
+    "tool": "dag_audit",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 97.108
+   }
+  ],
+  "lean_ok": true,
+  "sorry_count": 0,
+  "axiom_count": 0,
+  "audit_verdict": "PASS",
+  "wall_s": 97.109
+ },
+ {
+  "harness_name": "detailed_none",
+  "harness_fingerprint": "efddf661287d",
+  "steps": [
+   {
+    "step_id": "P01",
+    "agent": "StatementTranslator",
+    "tool": "mathlib_lookup",
+    "ok": true,
+    "output_sig": "27f1aedf8f",
+    "detail": "[llm:detailed] LLM generated 10 declaration(s): lambdaPerpValue, predictedGTCSq, SL6CFramework",
+    "duration_s": 0.013
+   },
+   {
+    "step_id": "P03",
+    "agent": "TargetStrengthAuditor",
+    "tool": "mathlib_lookup",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.013
+   },
+   {
+    "step_id": "T01",
+    "agent": "SkeletonGenerator",
+    "tool": "lean_compile",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.013
+   },
+   {
+    "step_id": "T06",
+    "agent": "ProofStateDebugger",
+    "tool": "lean_compile",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.013
+   },
+   {
+    "step_id": "T07",
+    "agent": "SorryEliminator",
+    "tool": "lean_compile",
+    "ok": false,
+    "output_sig": "t07-nofile",
+    "detail": "no lean file and LLM unavailable",
+    "duration_s": 0.013
+   },
+   {
+    "step_id": "H02",
+    "agent": "ConditionalRefactorer",
+    "tool": "template_library",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.013
+   },
+   {
+    "step_id": "H05",
+    "agent": "PerformativeHonestyDetector",
+    "tool": "content_audit",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.013
+   },
+   {
+    "step_id": "E01",
+    "agent": "AxiomDependencyPrinter",
+    "tool": "lean_compile",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.013
+   },
+   {
+    "step_id": "E02",
+    "agent": "GoldenGateChecker",
+    "tool": "dag_audit",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.013
+   },
+   {
+    "step_id": "E06",
+    "agent": "ChainClosureAuditor",
+    "tool": "dag_audit",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.013
+   }
+  ],
+  "lean_ok": true,
+  "sorry_count": 0,
+  "axiom_count": 0,
+  "audit_verdict": "PASS",
+  "wall_s": 0.013
+ },
+ {
+  "harness_name": "detailed_archive",
+  "harness_fingerprint": "6ba6e9111640",
+  "steps": [
+   {
+    "step_id": "P01",
+    "agent": "StatementTranslator",
+    "tool": "mathlib_lookup",
+    "ok": true,
+    "output_sig": "bd0e3cebb7",
+    "detail": "[llm:detailed] LLM generated 7 declaration(s): lambdaPerpStandardValue, tripleGaugeBound, conditional_triple_gauge_relation",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "P03",
+    "agent": "TargetStrengthAuditor",
+    "tool": "mathlib_lookup",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "T01",
+    "agent": "SkeletonGenerator",
+    "tool": "lean_compile",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "T06",
+    "agent": "ProofStateDebugger",
+    "tool": "lean_compile",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "T07",
+    "agent": "SorryEliminator",
+    "tool": "lean_compile",
+    "ok": false,
+    "output_sig": "t07-nofile",
+    "detail": "no lean file and LLM unavailable",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "H02",
+    "agent": "ConditionalRefactorer",
+    "tool": "template_library",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "H05",
+    "agent": "PerformativeHonestyDetector",
+    "tool": "content_audit",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "E01",
+    "agent": "AxiomDependencyPrinter",
+    "tool": "lean_compile",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "E02",
+    "agent": "GoldenGateChecker",
+    "tool": "dag_audit",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   },
+   {
+    "step_id": "E06",
+    "agent": "ChainClosureAuditor",
+    "tool": "dag_audit",
+    "ok": true,
+    "output_sig": "skip",
+    "detail": "no lean file: static audit skipped",
+    "duration_s": 0.012
+   }
+  ],
+  "lean_ok": true,
+  "sorry_count": 0,
+  "axiom_count": 0,
+  "audit_verdict": "PASS",
+  "wall_s": 0.012
+ }
+]

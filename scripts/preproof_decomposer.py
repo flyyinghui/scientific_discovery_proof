@@ -29,7 +29,7 @@ from collections import deque
 
 def _load_api_key() -> str:
     for env_path in [
-        '~/projects/cityhdg/spatial_agent/.env',
+        '~/.hermes/.env',
         os.path.expanduser('~/.hermes/.env'),
     ]:
         if os.path.exists(env_path):
@@ -120,7 +120,7 @@ def _llm_decompose(conj: dict, strategy: dict, api_key: str) -> list:
     )
 
     resp = client.chat.completions.create(
-        model="deepseek-flash",
+        model="deepseek-v4-flash",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=4096, temperature=0.4,
         extra_body={"thinking": {"type": "disabled"}},
