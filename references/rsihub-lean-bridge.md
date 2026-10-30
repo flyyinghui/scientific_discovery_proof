@@ -8,17 +8,17 @@
 
 | 组件 | 路径 | 说明 |
 |---|---|---|
-| RSIHub mutate operator | `~/projects/RSIHub/library/mutate/deepseek_lean.py` | DeepSeek v4-pro 诊断 + deepseek-flash 重写 Lean（有界） |
-| RSIHub 冻结评估器 | `~/projects/RSIHub/library/evaluators/lean_eval.py` | MathCode 风格确定性评分 |
-| RSIHub 配方 | `~/projects/RSIHub/recipes/lean_proof/evolve.yaml` | 完整 wiring（hillclimb + jsonl） |
+| RSIHub mutate operator | `~/projects/ai_for_science/RSIHub/library/mutate/deepseek_lean.py` | DeepSeek v4-pro 诊断 + v4-flash 重写 Lean（有界） |
+| RSIHub 冻结评估器 | `~/projects/ai_for_science/RSIHub/library/evaluators/lean_eval.py` | MathCode 风格确定性评分 |
+| RSIHub 配方 | `~/projects/ai_for_science/RSIHub/recipes/lean_proof/evolve.yaml` | 完整 wiring（hillclimb + jsonl） |
 | 桥接脚本 | `scripts/rsihub_lean_bridge.py`（本技能） | 零-Docker 驱动 RSIHub 循环 |
 | RSIHub 技能 | skill: `rsihub` | 框架用法 + 配方文档 |
 
 ## 调用方式（scientific-discovery-proof 启动时）
 
 ```bash
-cd ~/projects/RSIHub
-.venv/bin/python ~/.hermes/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
+cd ~/projects/ai_for_science/RSIHub
+.venv/bin/python ~/.hermes/skills/scientific-discovery-proof/scripts/rsihub_lean_bridge.py \
     --lean /path/to/proof.lean \
     --generations 3 \
     --output /tmp/lean_evo \
@@ -30,7 +30,7 @@ cd ~/projects/RSIHub
 1. **select** → `newest`（取最新接受的父代）
 2. **rollout** → `noop`（评估是确定性的，无 benchmark 采样）
 3. **analyze** → 冻结评估器的缺陷报告（确定性检测，非 LLM 判断）
-4. **mutate** → `deepseek_lean`：v4-pro 诊断根因 + deepseek-flash 重写（只改 `target/**/*.lean`）
+4. **mutate** → `deepseek_lean`：v4-pro 诊断根因 + v4-flash 重写（只改 `target/**/*.lean`）
 5. **gate** → `hillclimb`（strict：只接受分数严格提升）
 6. **record** → `jsonl`（append-only `archive.jsonl` 谱系）
 
@@ -59,5 +59,5 @@ score = 100 − 20·sorry − 15·admit − 10·(trivial+True_stub) − 30·comp
 ## 陷阱
 
 - `library` 是仓库根顶层包（非 `src/`），桥接脚本需 `sys.path` 同时加仓库根 + `src/`。
-- 桥接脚本必须用 RSIHub venv（3.12）运行：`cd ~/projects/RSIHub && .venv/bin/python ...`。
+- 桥接脚本必须用 RSIHub venv（3.12）运行：`cd ~/projects/ai_for_science/RSIHub && .venv/bin/python ...`。
 - 完整 `evolve run` 配方仍需 harbor/local 评估 plumbing；桥接脚本是零-Docker 的等价路径。

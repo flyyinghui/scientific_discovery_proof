@@ -113,11 +113,11 @@ Stage 3.5 引用核查（升级后）：
 
 ```bash
 # 1. 独立 venv（Python 3.11+）
-/usr/local/lib/hermes-agent-v14/venv/bin/python -m venv ~/projects/.venv
-~/projects/.venv/bin/pip install "paper-qa>=5" litellm sentence-transformers
+/usr/local/lib/hermes-agent-v14/venv/bin/python -m venv ~/projects/PaperQA/.venv
+~/projects/PaperQA/.venv/bin/pip install "paper-qa>=5" litellm sentence-transformers
 
 # 2. DeepSeek LLM（LiteLLM）
-export DEEPSEEK_API_KEY=...   # 从 ~/projects/ML-Master/.env 读
+export DEEPSEEK_API_KEY=...   # 从 ~/.hermes/.env 读
 
 # 3. 配置（paperqa Settings）
 from paperqa import Settings
@@ -149,7 +149,7 @@ Stage 3.5 内部：
   → 门控：任一 BLOCK → Stage 4 不启动
 ```
 
-**回滚**：外部核查脚本独立，不侵入现有脚本；移除即回到内部核对版本。PaperQA2 依赖装在独立 venv（~/projects/.venv），不污染 Hermes venv。
+**回滚**：外部核查脚本独立，不侵入现有脚本；移除即回到内部核对版本。PaperQA2 依赖装在独立 venv（~/projects/PaperQA/.venv），不污染 Hermes venv。
 
 ---
 

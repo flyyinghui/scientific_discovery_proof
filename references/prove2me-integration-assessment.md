@@ -35,7 +35,7 @@
 
 ## 四、诚实边界
 
-- `faithfulness_readback.py` 的盲读/对比走 deepseek-flash，是**启发式**审计（LLM 读代码），
+- `faithfulness_readback.py` 的盲读/对比走 DeepSeek v4-flash，是**启发式**审计（LLM 读代码），
   不是形式化保证。真正的 faithfulness 保证仍需人类审计者对比 read-back 和源材料。
 - `unverified_definition_deps` 检测是**语法层**的（typeDeps 里引用但 valueDeps 里从未出现），
   可能有假阳性（定义的性质通过实例/typeclass 隐式使用，语法层看不到）——WARN 而非 BLOCK。
